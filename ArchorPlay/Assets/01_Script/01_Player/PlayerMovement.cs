@@ -23,12 +23,20 @@ public class PlayerMovement : MonoBehaviour
     }
     private static PlayerMovement instance;
 
+    [Header("Weapon / Arsenal")]
+    public Transform rightGunBone;
+    public Transform leftGunBone;
+    public Arsenal[] arsenal;
+
     Rigidbody rb;
     public float moveSpeed = 5f;
     public Animator Anim;
 
+    [HideInInspector] public bool isAttacking = false;
+    // 필요하면 나중에 사용할 값들
     public float walkThreshold = 0.4f;
     public float backDotThreshold = -0.3f;
+
     public bool isDead = false;
     public bool isAiming = false;
 
@@ -36,6 +44,44 @@ public class PlayerMovement : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         Anim = GetComponent<Animator>();
+
+        if (arsenal != null && arsenal.Length > 0)
+        {
+            SetArsenal(arsenal[0].name);
+        }
+    }
+
+    // 임시 확인용 키보드 1~4
+    void Update()
+    {
+        HandleWeaponSwitchInput();
+    }
+
+    void HandleWeaponSwitchInput()
+    {
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+        {
+            if (arsenal.Length > 0)
+                SetArsenal(arsenal[0].name);
+        }
+
+        if (Input.GetKeyDown(KeyCode.Alpha2))
+        {
+            if (arsenal.Length > 1)
+                SetArsenal(arsenal[1].name);
+        }
+
+        if (Input.GetKeyDown(KeyCode.Alpha3))
+        {
+            if (arsenal.Length > 2)
+                SetArsenal(arsenal[2].name);
+        }
+
+        if (Input.GetKeyDown(KeyCode.Alpha4))
+        {
+            if (arsenal.Length > 3)
+                SetArsenal(arsenal[3].name);
+        }
     }
 
     void FixedUpdate()
@@ -49,16 +95,22 @@ public class PlayerMovement : MonoBehaviour
             SetAnimDead();
             return;
         }
-
+        // 공격 중
+        if (isAttacking)
+        {
+            rb.linearVelocity = Vector3.zero;
+            SetAnimAim();        // Speed 0 + Aiming true
+            return;
+        }
         // 입력 없을 때
         if (input.sqrMagnitude < 0.001f)
         {
             rb.linearVelocity = Vector3.zero;
 
             if (isAiming)
-                SetAnimAim();
+                SetAnimAim();   // 조준 + Speed 0
             else
-                SetAnimIdle();
+                SetAnimIdle();  // Idle (Speed 0)
 
             return;
         }
@@ -79,7 +131,6 @@ public class PlayerMovement : MonoBehaviour
             PlayerTargeting.Instance.currentTarget != null)
         {
             // 에이밍 중 + 타겟 존재 → 회전은 PlayerTargeting에서 처리
-            // 여기서는 회전하지 않음
         }
         else
         {
@@ -93,40 +144,86 @@ public class PlayerMovement : MonoBehaviour
         UpdateMoveAnimation(moveDir, input.magnitude);
     }
 
+    [System.Serializable]
+    public struct Arsenal
+    {
+        public string name;
+        public GameObject rightGun;
+        public GameObject leftGun;
+        public RuntimeAnimatorController controller;
+    }
+
+    /// <summary>
+    /// 이동 관련 애니메이션 업데이트
+    /// Speed(float), Aiming(bool)만 사용
+    /// </summary>
     void UpdateMoveAnimation(Vector3 moveDir, float inputMag)
     {
-        ResetMoveBools();
+        // 현재 속도 크기를 Speed 파라미터로 전달
+        float speedValue = rb.linearVelocity.magnitude;
+        Anim.SetFloat("Speed", speedValue);
 
-        if (inputMag < walkThreshold)
-            Anim.SetBool("Walk", true);
-        else
-            Anim.SetBool("Run", true);
+        // 조준 여부
+        Anim.SetBool("Aiming", isAiming);
     }
 
     void SetAnimIdle()
     {
-        ResetMoveBools();
-        Anim.SetBool("Idle", true);
+        Anim.SetFloat("Speed", 0f);     // 멈춤 → Idle
+        Anim.SetBool("Aiming", false);  // 조준 해제
     }
 
     void SetAnimDead()
     {
-        ResetMoveBools();
-        Anim.SetBool("Dead", true);
-    }
-
-    void ResetMoveBools()
-    {
-        Anim.SetBool("Idle", false);
-        Anim.SetBool("Run", false);
-        Anim.SetBool("Dead", false);
-        Anim.SetBool("Walk", false);
-        Anim.SetBool("Aiming", false);
+        Anim.SetFloat("Speed", 0f);
+        Anim.SetBool("Death", true);    // Animator에 있는 Death(bool)
     }
 
     void SetAnimAim()
     {
-        ResetMoveBools();
+        Anim.SetFloat("Speed", 0f);     // 제자리 조준
         Anim.SetBool("Aiming", true);
+    }
+
+    public void SetArsenal(string name)
+    {
+        foreach (Arsenal hand in arsenal)
+        {
+            if (hand.name == name)
+            {
+                // 기존 무기 제거
+                if (rightGunBone != null && rightGunBone.childCount > 0)
+                    Destroy(rightGunBone.GetChild(0).gameObject);
+
+                if (leftGunBone != null && leftGunBone.childCount > 0)
+                    Destroy(leftGunBone.GetChild(0).gameObject);
+
+                // 오른손 무기
+                if (hand.rightGun != null && rightGunBone != null)
+                {
+                    GameObject newRightGun = Instantiate(hand.rightGun);
+                    newRightGun.transform.SetParent(rightGunBone);
+                    newRightGun.transform.localPosition = Vector3.zero;
+                    newRightGun.transform.localRotation = Quaternion.Euler(90, 0, 0);
+                }
+
+                // 왼손 무기
+                if (hand.leftGun != null && leftGunBone != null)
+                {
+                    GameObject newLeftGun = Instantiate(hand.leftGun);
+                    newLeftGun.transform.SetParent(leftGunBone);
+                    newLeftGun.transform.localPosition = Vector3.zero;
+                    newLeftGun.transform.localRotation = Quaternion.Euler(90, 0, 0);
+                }
+
+                // 애니메이터 컨트롤러 교체
+                if (hand.controller != null && Anim != null)
+                {
+                    Anim.runtimeAnimatorController = hand.controller;
+                }
+
+                return;
+            }
+        }
     }
 }

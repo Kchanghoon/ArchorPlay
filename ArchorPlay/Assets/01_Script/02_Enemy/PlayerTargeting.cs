@@ -2,12 +2,14 @@ using UnityEngine;
 
 public class PlayerTargeting : MonoBehaviour
 {
-    // Singleton
     public static PlayerTargeting Instance { get; private set; }
 
     [Header("Targeting Settings")]
     public float searchRadius = 10f;
-    public LayerMask enemyLayer;
+    public LayerMask enemyLayer;      // 적 레이어
+    public LayerMask visibilityMask;  // 적 + 장애물(벽) 레이어 모두 포함
+    public float eyeHeight = 1.2f;    // 플레이어 눈높이
+
     public Transform currentTarget;
 
     void Awake()
@@ -22,43 +24,56 @@ public class PlayerTargeting : MonoBehaviour
 
     void Update()
     {
-        FindClosestEnemy();
+        FindClosestVisibleEnemy();
         HandleAimingState();
         AimToTarget();
     }
 
-    void FindClosestEnemy()
+    void FindClosestVisibleEnemy()
     {
-        Collider[] enemies = Physics.OverlapSphere(transform.position, searchRadius, enemyLayer);
+        Collider[] enemies =
+            Physics.OverlapSphere(transform.position, searchRadius, enemyLayer);
 
         float closestDistance = Mathf.Infinity;
         Transform nearest = null;
 
-        foreach (var enemy in enemies)
-        {
-            float dist = Vector3.Distance(transform.position, enemy.transform.position);
+        Vector3 eyePos = transform.position + Vector3.up * eyeHeight;
 
+        foreach (var enemyCol in enemies)
+        {
+            Transform enemy = enemyCol.transform;
+            Vector3 targetPos = enemyCol.bounds.center; // 적 중심 쪽으로
+
+            Vector3 dir = (targetPos - eyePos).normalized;
+            float dist = Vector3.Distance(eyePos, targetPos);
+
+            // 시야 체크: 적 + 장애물 레이어로 Raycast
+            if (Physics.Raycast(eyePos, dir, out RaycastHit hit, dist, visibilityMask))
+            {
+                // 첫 번째로 맞은 게 적이 아니면 → 벽/장애물에 가려진 것
+                if (!hit.collider.transform.IsChildOf(enemy))
+                {
+                    continue;
+                }
+            }
+
+            // 여기까지 왔으면 “보이는 적”
             if (dist < closestDistance)
             {
                 closestDistance = dist;
-                nearest = enemy.transform;
+                nearest = enemy;
             }
         }
 
         currentTarget = nearest;
     }
 
-    // 여기서 PlayerMovement와 실제로 연결
     void HandleAimingState()
     {
         if (PlayerMovement.Instance == null)
             return;
 
-        // 타겟이 있을 때만 조준 상태 ON
-        if (currentTarget != null)
-            PlayerMovement.Instance.isAiming = true;
-        else
-            PlayerMovement.Instance.isAiming = false;
+        PlayerMovement.Instance.isAiming = (currentTarget != null);
     }
 
     void AimToTarget()
@@ -67,8 +82,13 @@ public class PlayerTargeting : MonoBehaviour
             return;
 
         Vector3 dir = (currentTarget.position - transform.position).normalized;
-        Quaternion lookRot = Quaternion.LookRotation(dir);
+        dir.y = 0f;
 
-        transform.rotation = Quaternion.Slerp(transform.rotation, lookRot, Time.deltaTime * 10f);
+        Quaternion lookRot = Quaternion.LookRotation(dir);
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            lookRot,
+            Time.deltaTime * 10f
+        );
     }
 }
