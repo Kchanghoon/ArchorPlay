@@ -59,30 +59,50 @@ public class PlayerMovement : MonoBehaviour
 
     void HandleWeaponSwitchInput()
     {
+        // 같은 오브젝트에 붙어 있는 PlayerAttack 가져오기
+        PlayerAttack attack = GetComponent<PlayerAttack>();
+        if (attack == null)
+            return;
+
         if (Input.GetKeyDown(KeyCode.Alpha1))
         {
             if (arsenal.Length > 0)
+            {
                 SetArsenal(arsenal[0].name);
+                attack.bulletType = BulletType.Pistol;        // 권총
+            }
         }
 
         if (Input.GetKeyDown(KeyCode.Alpha2))
         {
             if (arsenal.Length > 1)
+            {
                 SetArsenal(arsenal[1].name);
+                attack.bulletType = BulletType.DualPistol;    // 쌍권총
+            }
         }
 
         if (Input.GetKeyDown(KeyCode.Alpha3))
         {
             if (arsenal.Length > 2)
+            {
                 SetArsenal(arsenal[2].name);
+                attack.bulletType = BulletType.Sniper;        // 저격총
+            }
         }
 
         if (Input.GetKeyDown(KeyCode.Alpha4))
         {
             if (arsenal.Length > 3)
+            {
                 SetArsenal(arsenal[3].name);
+                // 4번은 아직 타입 미정이면 일단 권총으로 두거나, 새 타입 추가해서 쓰면 됩니다.
+                attack.bulletType = BulletType.Pistol;
+            }
         }
     }
+
+
 
     void FixedUpdate()
     {

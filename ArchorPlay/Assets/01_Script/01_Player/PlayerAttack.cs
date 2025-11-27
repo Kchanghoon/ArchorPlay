@@ -4,15 +4,24 @@ using System.Collections;
 public class PlayerAttack : MonoBehaviour
 {
     [Header("Attack Settings")]
-    public float attackRange = 15f;      // ÃÑ »ç°Å¸®
-    public float fireRate = 4f;          // ÃÊ´ç ¹ß»ç ¼ö (¿¹: 4¸é 0.25ÃÊ¸¶´Ù ¹ß»ç)
-    public int damage = 10;              // ÇÑ ¹ß´ç µ¥¹ÌÁö[Header("Layer Masks")]
-    public LayerMask shootMask;          // ÃÑ¾ËÀÌ ¸ÂÀ» ¼ö ÀÖ´Â ·¹ÀÌ¾î (Àû + º® µÑ ´Ù)
+    public float attackRange = 15f;
+    public float fireRate = 4f;
+    public int damage = 10;
 
-    [Header("FX (¼±ÅÃ »çÇ×)")]
-    public Transform firePoint;          // ÃÑ±¸ À§Ä¡ (¾øÀ¸¸é ÇÃ·¹ÀÌ¾î À§Ä¡ »ç¿ë)
-    public ParticleSystem muzzleFlash;   // ÃÑ±¸ ÀÌÆåÆ®
-    public Animator anim;                // °ø°İ ¾Ö´Ï¸ŞÀÌ¼Ç¿ë
+    [Header("Layer Masks")]
+    public LayerMask shootMask;          // Enemy + Obstacle
+
+    [Header("Projectile")]
+    public BulletType bulletType = BulletType.Pistol; 
+    public float bulletSpeed = 30f;
+
+    [Header("FX (Effect)")]
+    public Transform firePoint;
+    public ParticleSystem muzzleFlash;
+    public Animator anim;
+
+    public LineRenderer laser;
+    public bool useLaserSight = true;
 
     float nextFireTime = 0f;
     bool isAttacking = false;
@@ -26,6 +35,7 @@ public class PlayerAttack : MonoBehaviour
     void Update()
     {
         AutoAttack();
+        UpdateLaserSight();
     }
 
     void AutoAttack()
@@ -37,16 +47,13 @@ public class PlayerAttack : MonoBehaviour
         if (target == null)
             return;
 
-        // »ç°Å¸® Ã¼Å©
         float dist = Vector3.Distance(transform.position, target.position);
         if (dist > attackRange)
             return;
 
-        // ÄğÅ¸ÀÓ Ã¼Å©
         if (Time.time < nextFireTime)
             return;
 
-        // ÀÌ¹Ì °ø°İ ÁßÀÌ¸é Áßº¹ ½ÇÇà ¹æÁö
         if (isAttacking)
             return;
 
@@ -57,67 +64,125 @@ public class PlayerAttack : MonoBehaviour
     {
         isAttacking = true;
 
-        // ÀÌµ¿ ¸ØÃß°í Á¶ÁØ »óÅÂ·Î ÀüÈ¯
         var move = PlayerMovement.Instance;
         if (move != null)
         {
-            move.isAiming = true;       // Á¶ÁØ ÇÃ·¡±×
-            move.isAttacking = true;    // ÀÌµ¿ Àá±İ
+            move.isAiming = true;
+            move.isAttacking = true;
         }
 
-        // »ìÂ¦ ¿¡ÀÌ¹Ö Æ÷Áî Àâ´Â ½Ã°£ (¿øÇÏ´Â ¸¸Å­ Á¶Àı)
+        // ì—ì´ë° ì¤€ë¹„ ì‹œê°„
         yield return new WaitForSeconds(0.1f);
 
-        // ½ÇÁ¦ ¹ß»ç
+        // â˜… ê·¸ ì‚¬ì´ì— íƒ€ê²Ÿì´ ì£½ì—ˆì„ ìˆ˜ë„ ìˆìœ¼ë‹ˆ ì²´í¬
+        if (target == null)
+        {
+            if (move != null)
+                move.isAttacking = false;
+
+            isAttacking = false;
+            yield break;
+        }
+
         Shoot(target);
 
-        // ´ÙÀ½ ¹ß»ç ½Ã°£ ¼³Á¤
         nextFireTime = Time.time + (1f / fireRate);
 
-        // °ø°İ Á¾·á ÈÄ ÀÌµ¿ Àá±İ ÇØÁ¦
         if (move != null)
-        {
             move.isAttacking = false;
-            // Å¸°ÙÀÌ °è¼Ó ÀÖ´Ù¸é isAiming À¯ÁöÇÏ°í ½ÍÀ¸¸é ±×´ë·Î µÎ°í,
-            // °ø°İ ÈÄ ¹Ù·Î ¿¡ÀÌ¹Ö ÇØÁ¦ÇÏ°í ½Í´Ù¸é ¾Æ·¡ ÁÙµµ Ãß°¡
-            // move.isAiming = false;
-        }
 
         isAttacking = false;
     }
 
     void Shoot(Transform target)
     {
-        // °ø°İ ¾Ö´Ï¸ŞÀÌ¼Ç
+        if (target == null)
+            return;
+
         if (anim != null)
             anim.SetTrigger("Attack");
 
-        // ÃÑ±¸ ÀÌÆåÆ®
         if (muzzleFlash != null)
             muzzleFlash.Play();
 
-        // ·¹ÀÌÄ³½ºÆ® ½ÃÀÛ À§Ä¡
-        Vector3 origin = firePoint != null ? firePoint.position : transform.position + Vector3.up * 1f;
+        Vector3 origin = firePoint != null
+            ? firePoint.position
+            : transform.position + Vector3.up * 1f;
+
         Vector3 dir = (target.position + Vector3.up * 1f - origin).normalized;
 
-        RaycastHit hit;
+        GameObject bulletObj = BulletPool.Instance.Spawn(
+            bulletType,
+            origin,
+            Quaternion.LookRotation(dir)
+        );
 
-        // ¡Ú Enemy + Wall(Àå¾Ö¹°)ÀÌ Æ÷ÇÔµÈ shootMask·Î Raycast
-        if (Physics.Raycast(origin, dir, out hit, attackRange, shootMask))
+        if (bulletObj == null)
+            return;
+
+        Rigidbody rb = bulletObj.GetComponent<Rigidbody>();
+        if (rb != null)
+            rb.linearVelocity = dir * bulletSpeed;
+
+        ProjectileBullet proj = bulletObj.GetComponent<ProjectileBullet>();
+        if (proj != null)
         {
-            // 1) ¸ÕÀú ¸ÂÀº °Ô EnemyÀÎÁö È®ÀÎ
-            EnemyHealth hp = hit.collider.GetComponent<EnemyHealth>();
-            if (hp != null)
-            {
-                // º®¿¡ °¡·ÁÁöÁö ¾Ê°í ÀûÀÌ ¡°Ã¹ ¹øÂ°·Î¡± ¸Â¾Ò´Ù ¡æ µ¥¹ÌÁö
-                hp.TakeDamage(damage);
-            }
-            else
-            {
-                // hp == null ÀÌ¸é º®/±âµÕ °°Àº Àå¾Ö¹°¿¡ ¸ÕÀú ¸ÂÀº °Í ¡æ ±×³É ¸·Èù °Í
-                // ÇÊ¿äÇÏ¸é ¿©±â¼­ ½ºÆÄÅ© ÀÌÆåÆ® µî Àç»ı °¡´É
-                // Debug.Log("º®¿¡ ¸·Çô¼­ ¸ø ¸ÂÃã : " + hit.collider.name);
-            }
+            proj.type = bulletType;
+            proj.damage = damage;
+            proj.hitMask = shootMask;
         }
+    }
+
+    void UpdateLaserSight()
+    {
+        if (!useLaserSight || laser == null || firePoint == null)
+        {
+            if (laser != null) laser.enabled = false;
+            return;
+        }
+
+        // íƒ€ê²Ÿì´ ì—†ìœ¼ë©´ ë ˆì´ì € ë„ê¸°
+        Transform target = PlayerTargeting.Instance != null
+            ? PlayerTargeting.Instance.currentTarget
+            : null;
+
+        if (target == null)
+        {
+            laser.enabled = false;
+            return;
+        }
+
+        laser.enabled = true;
+
+        // í¬ì¸íŠ¸ ê°œìˆ˜ëŠ” 2ê°œë¡œ ê³ ì •
+        if (laser.positionCount != 2)
+            laser.positionCount = 2;
+
+        // ì´êµ¬ â†’ ì ê¹Œì§€ ì„ 
+        Vector3 start = firePoint.position;
+        Vector3 end = target.position + Vector3.up * 1f;
+
+        laser.SetPosition(0, start);
+        laser.SetPosition(1, end);
+    }
+
+    void LateUpdate()
+    {
+        TestLaser();
+    }
+    void TestLaser()
+    {
+        if (laser == null || firePoint == null)
+            return;
+
+        laser.enabled = true;
+        if (laser.positionCount != 2)
+            laser.positionCount = 2;
+
+        Vector3 start = firePoint.position;
+        Vector3 end = firePoint.position + firePoint.forward * 5f + Vector3.up * 0.1f;
+
+        laser.SetPosition(0, start);
+        laser.SetPosition(1, end);
     }
 }
