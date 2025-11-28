@@ -20,8 +20,6 @@ public class PlayerAttack : MonoBehaviour
     public ParticleSystem muzzleFlash;
     public Animator anim;
 
-    public LineRenderer laser;
-    public bool useLaserSight = true;
 
     float nextFireTime = 0f;
     bool isAttacking = false;
@@ -35,13 +33,17 @@ public class PlayerAttack : MonoBehaviour
     void Update()
     {
         AutoAttack();
-        UpdateLaserSight();
     }
 
     void AutoAttack()
     {
         if (PlayerTargeting.Instance == null)
             return;
+
+        if (PlayerMovement.Instance != null && PlayerMovement.Instance.IsMoving)
+        {
+            return;
+        }
 
         Transform target = PlayerTargeting.Instance.currentTarget;
         if (target == null)
@@ -133,56 +135,4 @@ public class PlayerAttack : MonoBehaviour
         }
     }
 
-    void UpdateLaserSight()
-    {
-        if (!useLaserSight || laser == null || firePoint == null)
-        {
-            if (laser != null) laser.enabled = false;
-            return;
-        }
-
-        // 타겟이 없으면 레이저 끄기
-        Transform target = PlayerTargeting.Instance != null
-            ? PlayerTargeting.Instance.currentTarget
-            : null;
-
-        if (target == null)
-        {
-            laser.enabled = false;
-            return;
-        }
-
-        laser.enabled = true;
-
-        // 포인트 개수는 2개로 고정
-        if (laser.positionCount != 2)
-            laser.positionCount = 2;
-
-        // 총구 → 적까지 선
-        Vector3 start = firePoint.position;
-        Vector3 end = target.position + Vector3.up * 1f;
-
-        laser.SetPosition(0, start);
-        laser.SetPosition(1, end);
-    }
-
-    void LateUpdate()
-    {
-        TestLaser();
-    }
-    void TestLaser()
-    {
-        if (laser == null || firePoint == null)
-            return;
-
-        laser.enabled = true;
-        if (laser.positionCount != 2)
-            laser.positionCount = 2;
-
-        Vector3 start = firePoint.position;
-        Vector3 end = firePoint.position + firePoint.forward * 5f + Vector3.up * 0.1f;
-
-        laser.SetPosition(0, start);
-        laser.SetPosition(1, end);
-    }
 }

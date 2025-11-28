@@ -73,12 +73,24 @@ public class PlayerTargeting : MonoBehaviour
         if (PlayerMovement.Instance == null)
             return;
 
-        PlayerMovement.Instance.isAiming = (currentTarget != null);
+        bool isMoving = PlayerMovement.Instance.IsMoving;
+        if (currentTarget != null && !isMoving)
+        {
+            PlayerMovement.Instance.isAiming = true;
+        }
+        else
+        {
+            PlayerMovement.Instance.isAiming = false;
+        }
     }
 
     void AimToTarget()
     {
         if (currentTarget == null)
+            return;
+
+        //이동중 적을 향해 회전하지 않게 함
+        if (PlayerMovement.Instance != null && PlayerMovement.Instance.IsMoving)
             return;
 
         Vector3 dir = (currentTarget.position - transform.position).normalized;

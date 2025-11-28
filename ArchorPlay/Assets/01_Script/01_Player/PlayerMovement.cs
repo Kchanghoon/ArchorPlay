@@ -40,6 +40,17 @@ public class PlayerMovement : MonoBehaviour
     public bool isDead = false;
     public bool isAiming = false;
 
+    public bool IsMoving
+    {
+        get
+        {
+            // 속도가 0.1보다 크거나, 조이스틱 입력이 있으면 이동 중으로 판단
+            // (rb가 초기화되지 않았을 경우를 대비해 null 체크)
+            if (rb == null) return false;
+            return rb.linearVelocity.sqrMagnitude > 0.1f;
+        }
+    }
+
     void Start()
     {
         rb = GetComponent<Rigidbody>();
