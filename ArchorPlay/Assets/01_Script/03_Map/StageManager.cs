@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
-
+using UnityEngine.AI;
 /// <summary>
 /// 스테이지 관리 및 랜덤 이동 시스템
 /// </summary>
@@ -229,6 +229,13 @@ public class StageManager : MonoBehaviour
 
         // 위치 이동
         player.position = position;
+
+        Rigidbody rb = player.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector3.zero; 
+            rb.angularVelocity = Vector3.zero;
+        }
 
         // NavMeshAgent 재활성화
         if (agent != null)
