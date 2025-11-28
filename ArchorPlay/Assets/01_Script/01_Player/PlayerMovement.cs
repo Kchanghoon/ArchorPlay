@@ -1,180 +1,363 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
 
+/// <summary>
+/// 플레이어 이동 및 무기 관리 컴포넌트
+/// </summary>
 public class PlayerMovement : MonoBehaviour
 {
-    public static PlayerMovement Instance
+    #region Singleton
+    public static PlayerMovement Instance { get; private set; }
+
+    private void Awake()
     {
-        get
+        if (Instance != null && Instance != this)
         {
-            if (instance == null)
-            {
-                instance = FindFirstObjectByType<PlayerMovement>();
-                if (instance == null)
-                {
-                    var instanceContainer = new GameObject("PlayerMovement");
-                    instance = instanceContainer.AddComponent<PlayerMovement>();
-                }
-            }
-            return instance;
+            Destroy(gameObject);
+            return;
         }
+        Instance = this;
     }
-    private static PlayerMovement instance;
+    #endregion
 
-    [Header("Weapon / Arsenal")]
-    public Transform rightGunBone;
-    public Transform leftGunBone;
-    public Arsenal[] arsenal;
+    #region Serialized Fields
+    [Header("Movement Settings")]
+    [SerializeField] private float moveSpeed = 5f;
+    [SerializeField] private float rotationDuration = 0.15f;
+    [SerializeField] private float movementThreshold = 0.1f;
 
-    Rigidbody rb;
-    public float moveSpeed = 5f;
-    public Animator Anim;
+    [Header("References")]
+    [SerializeField] private Transform rightGunBone;
+    [SerializeField] private Transform leftGunBone;
+    [SerializeField] private Animator animator;
+    [SerializeField] private Arsenal[] arsenals;
 
-    [HideInInspector] public bool isAttacking = false;
-    // 필요하면 나중에 사용할 값들
-    public float walkThreshold = 0.4f;
-    public float backDotThreshold = -0.3f;
+    [Header("Dependencies")]
+    [SerializeField] private PlayerTargeting targeting;
+    [SerializeField] private JoyStickMovement joystick;
+    #endregion
 
-    public bool isDead = false;
-    public bool isAiming = false;
+    #region Private Fields
+    private Rigidbody rb;
+    private PlayerState currentState = PlayerState.Idle;
 
-    public bool IsMoving
+    // Animation Parameter IDs (성능 최적화)
+    private int speedParamID;
+    private int aimingParamID;
+    private int deathParamID;
+    private int attackParamID;
+    #endregion
+
+    #region Properties
+    public PlayerState CurrentState => currentState;
+
+    public bool IsMoving => rb != null && rb.linearVelocity.sqrMagnitude > movementThreshold;
+
+    public bool IsDead => currentState == PlayerState.Dead;
+
+    public bool IsAiming => currentState == PlayerState.Aiming || currentState == PlayerState.Attacking;
+    #endregion
+
+    #region Events
+    public event Action<WeaponType> OnWeaponChanged;
+    public event Action<PlayerState, PlayerState> OnStateChanged;
+    #endregion
+
+    #region Unity Lifecycle
+    private void Start()
     {
-        get
-        {
-            // 속도가 0.1보다 크거나, 조이스틱 입력이 있으면 이동 중으로 판단
-            // (rb가 초기화되지 않았을 경우를 대비해 null 체크)
-            if (rb == null) return false;
-            return rb.linearVelocity.sqrMagnitude > 0.1f;
-        }
+        InitializeComponents();
+        CacheAnimationParameters();
+        InitializeWeapon();
     }
 
-    void Start()
-    {
-        rb = GetComponent<Rigidbody>();
-        Anim = GetComponent<Animator>();
-
-        if (arsenal != null && arsenal.Length > 0)
-        {
-            SetArsenal(arsenal[0].name);
-        }
-    }
-
-    // 임시 확인용 키보드 1~4
-    void Update()
+    private void Update()
     {
         HandleWeaponSwitchInput();
     }
 
-    void HandleWeaponSwitchInput()
+    private void FixedUpdate()
     {
-        // 같은 오브젝트에 붙어 있는 PlayerAttack 가져오기
-        PlayerAttack attack = GetComponent<PlayerAttack>();
-        if (attack == null)
+        if (currentState == PlayerState.Dead)
+        {
+            rb.linearVelocity = Vector3.zero;
             return;
-
-        if (Input.GetKeyDown(KeyCode.Alpha1))
-        {
-            if (arsenal.Length > 0)
-            {
-                SetArsenal(arsenal[0].name);
-                attack.bulletType = BulletType.Pistol;        // 권총
-            }
         }
 
-        if (Input.GetKeyDown(KeyCode.Alpha2))
+        HandleMovement();
+    }
+    #endregion
+
+    #region Initialization
+    private void InitializeComponents()
+    {
+        rb = GetComponent<Rigidbody>();
+
+        if (animator == null)
+            animator = GetComponent<Animator>();
+
+        if (targeting == null)
+            targeting = GetComponent<PlayerTargeting>();
+
+        if (joystick == null)
+            joystick = JoyStickMovement.Instance;
+    }
+
+    private void CacheAnimationParameters()
+    {
+        if (animator == null) return;
+
+        speedParamID = Animator.StringToHash("Speed");
+        aimingParamID = Animator.StringToHash("Aiming");
+        deathParamID = Animator.StringToHash("Death");
+        attackParamID = Animator.StringToHash("Attack");
+    }
+
+    private void InitializeWeapon()
+    {
+        if (arsenals == null || arsenals.Length == 0)
         {
-            if (arsenal.Length > 1)
-            {
-                SetArsenal(arsenal[1].name);
-                attack.bulletType = BulletType.DualPistol;    // 쌍권총
-            }
+            Debug.LogError("⚠️ Arsenals array is not set up! Please configure weapons in Inspector.");
+            return;
         }
 
-        if (Input.GetKeyDown(KeyCode.Alpha3))
-        {
-            if (arsenal.Length > 2)
-            {
-                SetArsenal(arsenal[2].name);
-                attack.bulletType = BulletType.Sniper;        // 저격총
-            }
-        }
+        // 기본 무기를 Hand(맨손)로 설정
+        SetArsenal(WeaponType.Hand);
+    }
+    #endregion
 
-        if (Input.GetKeyDown(KeyCode.Alpha4))
+    #region State Management
+    public void SetState(PlayerState newState)
+    {
+        if (currentState == newState) return;
+
+        PlayerState previousState = currentState;
+        OnStateExit(currentState);
+        currentState = newState;
+        OnStateEnter(newState);
+
+        OnStateChanged?.Invoke(previousState, newState);
+    }
+
+    private void OnStateEnter(PlayerState state)
+    {
+        switch (state)
         {
-            if (arsenal.Length > 3)
-            {
-                SetArsenal(arsenal[3].name);
-                // 4번은 아직 타입 미정이면 일단 권총으로 두거나, 새 타입 추가해서 쓰면 됩니다.
-                attack.bulletType = BulletType.Pistol;
-            }
+            case PlayerState.Idle:
+                UpdateAnimation(0f, false);
+                break;
+
+            case PlayerState.Moving:
+                break;
+
+            case PlayerState.Aiming:
+                UpdateAnimation(0f, true);
+                break;
+
+            case PlayerState.Attacking:
+                UpdateAnimation(0f, true);
+                break;
+
+            case PlayerState.Dead:
+                UpdateAnimation(0f, false);
+                if (animator != null)
+                    animator.SetBool(deathParamID, true);
+                break;
         }
     }
 
-
-
-    void FixedUpdate()
+    private void OnStateExit(PlayerState state)
     {
-        Vector3 input = JoyStickMovement.Instance.joyVec;
+        // 필요시 상태 종료 처리
+    }
 
-        // 죽었을 때
-        if (isDead)
+    public void Die()
+    {
+        SetState(PlayerState.Dead);
+    }
+    #endregion
+
+    #region Movement
+    private void HandleMovement()
+    {
+        if (joystick == null) return;
+
+        Vector3 input = joystick.joyVec;
+
+        // 공격 중에는 이동 불가
+        if (currentState == PlayerState.Attacking)
         {
             rb.linearVelocity = Vector3.zero;
-            SetAnimDead();
             return;
         }
-        // 공격 중
-        if (isAttacking)
-        {
-            rb.linearVelocity = Vector3.zero;
-            SetAnimAim();        // Speed 0 + Aiming true
-            return;
-        }
-        // 입력 없을 때
+
+        // 입력이 없을 때
         if (input.sqrMagnitude < 0.001f)
         {
             rb.linearVelocity = Vector3.zero;
 
-            if (isAiming)
-                SetAnimAim();   // 조준 + Speed 0
+            // 타겟이 있으면 조준 상태, 없으면 Idle
+            if (targeting != null && targeting.CurrentTarget != null)
+            {
+                SetState(PlayerState.Aiming);
+            }
             else
-                SetAnimIdle();  // Idle (Speed 0)
-
+            {
+                SetState(PlayerState.Idle);
+            }
             return;
         }
 
-        // ─────────────────────────────────────
-        //  이동 방향 계산
-        // ─────────────────────────────────────
+        // 이동 처리
         Vector3 moveDir = new Vector3(input.x, 0, input.y).normalized;
-
-        // 물리 이동
         rb.linearVelocity = moveDir * moveSpeed;
 
-        // ─────────────────────────────────────
-        //  회전 처리
-        // ─────────────────────────────────────
-        if (isAiming &&
-            PlayerTargeting.Instance != null &&
-            PlayerTargeting.Instance.currentTarget != null)
-        {
-            // 에이밍 중 + 타겟 존재 → 회전은 PlayerTargeting에서 처리
-        }
-        else
-        {
-            // 에이밍이 아니면 이동 방향을 향해 회전
-            transform.DOKill();
-            transform.DOLookAt(transform.position + moveDir, 0.15f)
-                     .SetEase(Ease.OutQuad);
-        }
+        SetState(PlayerState.Moving);
 
-        // 애니메이션
-        UpdateMoveAnimation(moveDir, input.magnitude);
+        // 회전 처리
+        HandleRotation(moveDir);
+
+        // 애니메이션 업데이트
+        UpdateAnimation(rb.linearVelocity.magnitude, false);
     }
 
+    private void HandleRotation(Vector3 moveDir)
+    {
+        // 조준 중이고 타겟이 있으면 타겟팅 클래스에서 회전 처리
+        if (IsAiming && targeting != null && targeting.CurrentTarget != null)
+        {
+            // PlayerTargeting에서 처리
+            return;
+        }
+
+        // 이동 방향으로 회전
+        if (moveDir.sqrMagnitude > 0.001f)
+        {
+            transform.DOKill();
+            transform.DOLookAt(transform.position + moveDir, rotationDuration)
+                     .SetEase(Ease.OutQuad);
+        }
+    }
+    #endregion
+
+    #region Animation
+    private void UpdateAnimation(float speed, bool isAiming)
+    {
+        if (animator == null) return;
+
+        animator.SetFloat(speedParamID, speed);
+        animator.SetBool(aimingParamID, isAiming);
+    }
+
+    public void TriggerAttackAnimation()
+    {
+        if (animator == null) return;
+        animator.SetTrigger(attackParamID);
+    }
+    #endregion
+
+    #region Weapon Management
+    private void HandleWeaponSwitchInput()
+    {
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+        {
+            SetArsenal(WeaponType.Hand);
+        }
+        else if (Input.GetKeyDown(KeyCode.Alpha2))
+        {
+            SetArsenal(WeaponType.Pistol);
+        }
+        else if (Input.GetKeyDown(KeyCode.Alpha3))
+        {
+            SetArsenal(WeaponType.DualPistol);
+        }
+        else if (Input.GetKeyDown(KeyCode.Alpha4))
+        {
+            SetArsenal(WeaponType.Sniper);
+        }
+    }
+
+    public void SetArsenal(WeaponType weaponType)
+    {
+        int index = (int)weaponType;
+
+        // 배열 유효성 체크
+        if (arsenals == null || arsenals.Length == 0)
+        {
+            Debug.LogError("Arsenals array is empty! Please set up weapons in Inspector.");
+            return;
+        }
+
+        if (index < 0 || index >= arsenals.Length)
+        {
+            Debug.LogWarning($"Arsenal index {index} ({weaponType}) out of range! Available: 0-{arsenals.Length - 1}");
+            return;
+        }
+
+        Arsenal arsenal = arsenals[index];
+
+        // 무기 이름 확인
+        if (string.IsNullOrEmpty(arsenal.name))
+        {
+            Debug.LogWarning($"Arsenal at index {index} has no name!");
+        }
+
+        Debug.Log($"Switching to weapon: {weaponType} (Index: {index})");
+
+        // 기존 무기 제거
+        ClearWeapons();
+
+        // 새 무기 장착
+        EquipWeapon(arsenal);
+
+        // 애니메이터 컨트롤러 교체
+        if (arsenal.controller != null && animator != null)
+        {
+            animator.runtimeAnimatorController = arsenal.controller;
+            Debug.Log($"Animator controller changed to: {arsenal.controller.name}");
+        }
+        else if (arsenal.controller == null)
+        {
+            Debug.LogWarning($"No animator controller assigned for {weaponType}!");
+        }
+
+        // 이벤트 발생
+        OnWeaponChanged?.Invoke(weaponType);
+    }
+
+    private void ClearWeapons()
+    {
+        if (rightGunBone != null && rightGunBone.childCount > 0)
+            Destroy(rightGunBone.GetChild(0).gameObject);
+
+        if (leftGunBone != null && leftGunBone.childCount > 0)
+            Destroy(leftGunBone.GetChild(0).gameObject);
+    }
+
+    private void EquipWeapon(Arsenal arsenal)
+    {
+        // 오른손 무기
+        if (arsenal.rightGun != null && rightGunBone != null)
+        {
+            GameObject newRightGun = Instantiate(arsenal.rightGun, rightGunBone);
+            newRightGun.transform.localPosition = Vector3.zero;
+            newRightGun.transform.localRotation = Quaternion.Euler(90, 0, 0);
+        }
+
+        // 왼손 무기
+        if (arsenal.leftGun != null && leftGunBone != null)
+        {
+            GameObject newLeftGun = Instantiate(arsenal.leftGun, leftGunBone);
+            newLeftGun.transform.localPosition = Vector3.zero;
+            newLeftGun.transform.localRotation = Quaternion.Euler(90, 0, 0);
+        }
+    }
+    #endregion
+
+    #region Data Structures
     [System.Serializable]
     public struct Arsenal
     {
@@ -183,78 +366,5 @@ public class PlayerMovement : MonoBehaviour
         public GameObject leftGun;
         public RuntimeAnimatorController controller;
     }
-
-    /// <summary>
-    /// 이동 관련 애니메이션 업데이트
-    /// Speed(float), Aiming(bool)만 사용
-    /// </summary>
-    void UpdateMoveAnimation(Vector3 moveDir, float inputMag)
-    {
-        // 현재 속도 크기를 Speed 파라미터로 전달
-        float speedValue = rb.linearVelocity.magnitude;
-        Anim.SetFloat("Speed", speedValue);
-
-        // 조준 여부
-        Anim.SetBool("Aiming", isAiming);
-    }
-
-    void SetAnimIdle()
-    {
-        Anim.SetFloat("Speed", 0f);     // 멈춤 → Idle
-        Anim.SetBool("Aiming", false);  // 조준 해제
-    }
-
-    void SetAnimDead()
-    {
-        Anim.SetFloat("Speed", 0f);
-        Anim.SetBool("Death", true);    // Animator에 있는 Death(bool)
-    }
-
-    void SetAnimAim()
-    {
-        Anim.SetFloat("Speed", 0f);     // 제자리 조준
-        Anim.SetBool("Aiming", true);
-    }
-
-    public void SetArsenal(string name)
-    {
-        foreach (Arsenal hand in arsenal)
-        {
-            if (hand.name == name)
-            {
-                // 기존 무기 제거
-                if (rightGunBone != null && rightGunBone.childCount > 0)
-                    Destroy(rightGunBone.GetChild(0).gameObject);
-
-                if (leftGunBone != null && leftGunBone.childCount > 0)
-                    Destroy(leftGunBone.GetChild(0).gameObject);
-
-                // 오른손 무기
-                if (hand.rightGun != null && rightGunBone != null)
-                {
-                    GameObject newRightGun = Instantiate(hand.rightGun);
-                    newRightGun.transform.SetParent(rightGunBone);
-                    newRightGun.transform.localPosition = Vector3.zero;
-                    newRightGun.transform.localRotation = Quaternion.Euler(90, 0, 0);
-                }
-
-                // 왼손 무기
-                if (hand.leftGun != null && leftGunBone != null)
-                {
-                    GameObject newLeftGun = Instantiate(hand.leftGun);
-                    newLeftGun.transform.SetParent(leftGunBone);
-                    newLeftGun.transform.localPosition = Vector3.zero;
-                    newLeftGun.transform.localRotation = Quaternion.Euler(90, 0, 0);
-                }
-
-                // 애니메이터 컨트롤러 교체
-                if (hand.controller != null && Anim != null)
-                {
-                    Anim.runtimeAnimatorController = hand.controller;
-                }
-
-                return;
-            }
-        }
-    }
+    #endregion
 }

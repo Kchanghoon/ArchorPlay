@@ -1,138 +1,321 @@
 using UnityEngine;
 using System.Collections;
 
+/// <summary>
+/// 플레이어 자동 공격 컴포넌트
+/// </summary>
 public class PlayerAttack : MonoBehaviour
 {
+    #region Constants
+    private const float DEFAULT_EYE_HEIGHT = 1f;
+    private const float AIM_PREPARE_DURATION = 0.1f;
+    #endregion
+
+    #region Serialized Fields
     [Header("Attack Settings")]
-    public float attackRange = 15f;
-    public float fireRate = 4f;
-    public int damage = 10;
+    [SerializeField] private float attackRange = 15f;
+    [SerializeField] private float fireRate = 4f;
+    [SerializeField] private int damage = 10;
+    [SerializeField] private BulletType bulletType = BulletType.Pistol;
+    [SerializeField] private float bulletSpeed = 30f;
 
     [Header("Layer Masks")]
-    public LayerMask shootMask;          // Enemy + Obstacle
+    [SerializeField] private LayerMask shootMask;
 
-    [Header("Projectile")]
-    public BulletType bulletType = BulletType.Pistol; 
-    public float bulletSpeed = 30f;
+    [Header("References")]
+    [SerializeField] private Transform firePoint;
+    [SerializeField] private ParticleSystem muzzleFlash;
 
-    [Header("FX (Effect)")]
-    public Transform firePoint;
-    public ParticleSystem muzzleFlash;
-    public Animator anim;
+    [Header("Dependencies")]
+    [SerializeField] private PlayerMovement movement;
+    [SerializeField] private PlayerTargeting targeting;
+    [SerializeField] private BulletPool bulletPool;
+    #endregion
 
+    #region Private Fields
+    private float nextFireTime = 0f;
+    private Coroutine attackCoroutine;
+    #endregion
 
-    float nextFireTime = 0f;
-    bool isAttacking = false;
-
-    void Start()
+    #region Properties
+    public BulletType CurrentBulletType
     {
-        if (anim == null)
-            anim = GetComponent<Animator>();
+        get => bulletType;
+        set => bulletType = value;
     }
 
-    void Update()
+    public bool CanAttack => Time.time >= nextFireTime && attackCoroutine == null;
+    #endregion
+
+    #region Unity Lifecycle
+    private void Start()
     {
-        AutoAttack();
+        InitializeComponents();
+        SubscribeToEvents();
     }
 
-    void AutoAttack()
+    private void OnDestroy()
     {
-        if (PlayerTargeting.Instance == null)
-            return;
+        UnsubscribeFromEvents();
+    }
 
-        if (PlayerMovement.Instance != null && PlayerMovement.Instance.IsMoving)
+    private void Update()
+    {
+        ProcessAutoAttack();
+    }
+    #endregion
+
+    #region Initialization
+    private void InitializeComponents()
+    {
+        if (movement == null)
+            movement = GetComponent<PlayerMovement>();
+
+        if (targeting == null)
+            targeting = GetComponent<PlayerTargeting>();
+
+        if (bulletPool == null)
+            bulletPool = BulletPool.Instance;
+    }
+
+    private void SubscribeToEvents()
+    {
+        if (movement != null)
         {
-            return;
+            movement.OnWeaponChanged += HandleWeaponChanged;
         }
+    }
 
-        Transform target = PlayerTargeting.Instance.currentTarget;
+    private void UnsubscribeFromEvents()
+    {
+        if (movement != null)
+        {
+            movement.OnWeaponChanged -= HandleWeaponChanged;
+        }
+    }
+    #endregion
+
+    #region Event Handlers
+    private void HandleWeaponChanged(WeaponType weaponType)
+    {
+        // 무기 타입에 따라 탄환 타입 변경
+        bulletType = weaponType switch
+        {
+            WeaponType.Hand => BulletType.Hand,
+            WeaponType.Pistol => BulletType.Pistol,
+            WeaponType.DualPistol => BulletType.DualPistol,
+            WeaponType.Sniper => BulletType.Sniper,
+            _ => BulletType.Pistol
+        };
+    }
+    #endregion
+
+    #region Auto Attack
+    private void ProcessAutoAttack()
+    {
+        // 의존성 체크
+        if (targeting == null || movement == null)
+            return;
+
+        // 이동 중에는 공격 불가
+        if (movement.IsMoving)
+            return;
+
+        // 사망 상태에서는 공격 불가
+        if (movement.IsDead)
+            return;
+
+        // 타겟 확인
+        Transform target = targeting.CurrentTarget;
         if (target == null)
             return;
 
-        float dist = Vector3.Distance(transform.position, target.position);
-        if (dist > attackRange)
+        // 사거리 체크
+        float distance = Vector3.Distance(transform.position, target.position);
+        if (distance > attackRange)
             return;
 
-        if (Time.time < nextFireTime)
+        // 공격 가능 여부 체크
+        if (!CanAttack)
             return;
 
-        if (isAttacking)
-            return;
-
-        StartCoroutine(AttackRoutine(target));
+        // 공격 시작
+        StartAttackSequence(target);
     }
 
-    IEnumerator AttackRoutine(Transform target)
+    private void StartAttackSequence(Transform target)
     {
-        isAttacking = true;
-
-        var move = PlayerMovement.Instance;
-        if (move != null)
+        if (attackCoroutine != null)
         {
-            move.isAiming = true;
-            move.isAttacking = true;
+            StopCoroutine(attackCoroutine);
+        }
+
+        attackCoroutine = StartCoroutine(AttackRoutine(target));
+    }
+
+    public void CancelAttack()
+    {
+        if (attackCoroutine != null)
+        {
+            StopCoroutine(attackCoroutine);
+            attackCoroutine = null;
+        }
+
+        if (movement != null)
+        {
+            movement.SetState(PlayerState.Idle);
+        }
+    }
+    #endregion
+
+    #region Attack Coroutine
+    private IEnumerator AttackRoutine(Transform target)
+    {
+        // 공격 상태로 전환
+        if (movement != null)
+        {
+            movement.SetState(PlayerState.Attacking);
         }
 
         // 에이밍 준비 시간
-        yield return new WaitForSeconds(0.1f);
+        yield return new WaitForSeconds(AIM_PREPARE_DURATION);
 
-        // ★ 그 사이에 타겟이 죽었을 수도 있으니 체크
-        if (target == null)
+        // 타겟 유효성 재확인
+        if (!IsTargetValid(target))
         {
-            if (move != null)
-                move.isAttacking = false;
-
-            isAttacking = false;
+            FinishAttack();
             yield break;
         }
 
-        Shoot(target);
+        // 발사
+        ExecuteShoot(target);
 
+        // 다음 발사 시간 설정
         nextFireTime = Time.time + (1f / fireRate);
 
-        if (move != null)
-            move.isAttacking = false;
-
-        isAttacking = false;
+        // 공격 완료
+        FinishAttack();
     }
 
-    void Shoot(Transform target)
+    private bool IsTargetValid(Transform target)
+    {
+        if (target == null)
+            return false;
+
+        // GameObject가 비활성화되었는지 체크
+        if (!target.gameObject.activeInHierarchy)
+            return false;
+
+        // 적의 Health 컴포넌트 체크 (죽었는지 확인)
+        var enemyHealth = target.GetComponent<EnemyHealth>();
+        if (enemyHealth != null && enemyHealth.IsDead)
+            return false;
+
+        // 다른 Health 컴포넌트 이름이 있다면 추가
+        // 예: var health = target.GetComponent<Health>();
+        // if (health != null && health.CurrentHealth <= 0)
+        //     return false;
+
+        return true;
+    }
+
+    private void FinishAttack()
+    {
+        if (movement != null)
+        {
+            movement.SetState(PlayerState.Idle);
+        }
+
+        attackCoroutine = null;
+    }
+    #endregion
+
+    #region Shooting
+    private void ExecuteShoot(Transform target)
     {
         if (target == null)
             return;
 
-        if (anim != null)
-            anim.SetTrigger("Attack");
+        // 애니메이션 트리거
+        if (movement != null)
+        {
+            movement.TriggerAttackAnimation();
+        }
 
-        if (muzzleFlash != null)
-            muzzleFlash.Play();
+        // 이펙트 재생
+        PlayMuzzleFlash();
 
-        Vector3 origin = firePoint != null
-            ? firePoint.position
-            : transform.position + Vector3.up * 1f;
+        // 발사 위치 및 방향 계산
+        Vector3 origin = GetFireOrigin();
+        Vector3 direction = CalculateShootDirection(target, origin);
 
-        Vector3 dir = (target.position + Vector3.up * 1f - origin).normalized;
+        // 탄환 생성
+        SpawnProjectile(origin, direction);
+    }
 
-        GameObject bulletObj = BulletPool.Instance.Spawn(
+    private Vector3 GetFireOrigin()
+    {
+        if (firePoint != null)
+            return firePoint.position;
+
+        return transform.position + Vector3.up * DEFAULT_EYE_HEIGHT;
+    }
+
+    private Vector3 CalculateShootDirection(Transform target, Vector3 origin)
+    {
+        Vector3 targetPosition = target.position + Vector3.up * DEFAULT_EYE_HEIGHT;
+        return (targetPosition - origin).normalized;
+    }
+
+    private void SpawnProjectile(Vector3 origin, Vector3 direction)
+    {
+        if (bulletPool == null)
+        {
+            Debug.LogWarning("BulletPool is not assigned!");
+            return;
+        }
+
+        GameObject bulletObj = bulletPool.Spawn(
             bulletType,
             origin,
-            Quaternion.LookRotation(dir)
+            Quaternion.LookRotation(direction)
         );
 
         if (bulletObj == null)
             return;
 
+        // 물리 속도 설정
         Rigidbody rb = bulletObj.GetComponent<Rigidbody>();
         if (rb != null)
-            rb.linearVelocity = dir * bulletSpeed;
-
-        ProjectileBullet proj = bulletObj.GetComponent<ProjectileBullet>();
-        if (proj != null)
         {
-            proj.type = bulletType;
-            proj.damage = damage;
-            proj.hitMask = shootMask;
+            rb.linearVelocity = direction * bulletSpeed;
+        }
+
+        // 발사체 설정
+        ProjectileBullet projectile = bulletObj.GetComponent<ProjectileBullet>();
+        if (projectile != null)
+        {
+            projectile.type = bulletType;
+            projectile.damage = damage;
+            projectile.hitMask = shootMask;
         }
     }
 
+    private void PlayMuzzleFlash()
+    {
+        if (muzzleFlash != null)
+        {
+            muzzleFlash.Play();
+        }
+    }
+    #endregion
+
+    #region Gizmos
+    private void OnDrawGizmosSelected()
+    {
+        // 공격 범위 시각화
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, attackRange);
+    }
+    #endregion
 }
