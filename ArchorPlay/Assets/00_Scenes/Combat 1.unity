@@ -3401,6 +3401,11 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 518603925}
   m_SourcePrefab: {fileID: 100100000, guid: 3e44f86169ecf5f41926bb82427b87d6, type: 3}
+--- !u!4 &172561819 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400096, guid: 3e44f86169ecf5f41926bb82427b87d6, type: 3}
+  m_PrefabInstance: {fileID: 172561818}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &174420348
 GameObject:
   m_ObjectHideFlags: 0
@@ -10804,7 +10809,7 @@ MonoBehaviour:
   totalStages: 20
   angelStageInterval: 10
   lastStageIndex: 20
-  player: {fileID: 0}
+  player: {fileID: 172561819}
 --- !u!4 &577175226
 Transform:
   m_ObjectHideFlags: 0
