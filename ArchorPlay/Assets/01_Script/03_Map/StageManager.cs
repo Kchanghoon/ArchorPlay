@@ -1,14 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
-/// <summary>
-/// 스테이지 관리 및 랜덤 이동 시스템
-/// </summary>
+
 public class StageManager : MonoBehaviour
 {
     #region Singleton
     public static StageManager Instance { get; private set; }
-
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -24,39 +21,39 @@ public class StageManager : MonoBehaviour
     [System.Serializable]
     public class StageInfo
     {
-        public string stageName;              // 스테이지 이름
-        public Transform spawnPoint;          // 플레이어 스폰 위치
-        public StageType type;                // 스테이지 타입
+        public string stageName;
+        public Transform spawnPoint;
+        public Transform clearPoint; // 스테이지별 클리어 포인트 위치
+        public StageType type;
     }
 
-    public enum StageType
-    {
-        Normal,     // 일반 스테이지
-        Angel,      // 천사 스테이지 (특수)
-        Boss        // 보스 스테이지
-    }
+    public enum StageType { Normal, Angel, Boss }
     #endregion
 
     #region Serialized Fields
     [Header("Stage Configuration")]
-    [SerializeField] private List<StageInfo> normalStages = new List<StageInfo>();
+    [SerializeField] private List<StageInfo> lv1NormalStages = new List<StageInfo>(); // 1~10
+    [SerializeField] private List<StageInfo> lv2NormalStages = new List<StageInfo>(); // 11~20
     [SerializeField] private List<StageInfo> angelStages = new List<StageInfo>();
     [SerializeField] private List<StageInfo> bossStages = new List<StageInfo>();
 
     [Header("Stage Settings")]
-    [SerializeField] private int totalStages = 20;           // 전체 스테이지 수
-    [SerializeField] private int angelStageInterval = 10;    // 천사 스테이지 주기 (10, 20, 30...)
-    [SerializeField] private int lastStageIndex = 20;        // 마지막 보스 스테이지
+    [SerializeField] private int totalStages = 20;
+    [SerializeField] private int lastStageIndex = 20;
 
     [Header("References")]
     [SerializeField] private Transform player;
+    [SerializeField] private StageClearDetector clearPointTrigger; // 공용 트리거
     #endregion
 
     #region Private Fields
     private int currentStage = 0;
-    private List<int> usedNormalStageIndices = new List<int>();
-    private List<int> usedAngelStageIndices = new List<int>();
-    private List<int> usedBossStageIndices = new List<int>();
+    private Queue<StageType> pendingStageTypes = new Queue<StageType>();
+
+    private List<int> usedLv1Normal = new List<int>();
+    private List<int> usedLv2Normal = new List<int>();
+    private List<int> usedAngel = new List<int>();
+    private List<int> usedBoss = new List<int>();
     #endregion
 
     #region Properties
@@ -69,8 +66,6 @@ public class StageManager : MonoBehaviour
     private void Start()
     {
         InitializePlayer();
-
-        // 첫 스테이지 시작
         MoveToNextStage();
     }
     #endregion
@@ -78,71 +73,56 @@ public class StageManager : MonoBehaviour
     #region Initialization
     private void InitializePlayer()
     {
-        if (player == null)
+        if (player != null) return;
+
+        if (PlayerMovement.Instance != null)
         {
-            if (PlayerMovement.Instance != null)
-            {
-                player = PlayerMovement.Instance.transform;
-            }
-            else
-            {
-                GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
-                if (playerObj != null)
-                {
-                    player = playerObj.transform;
-                }
-            }
+            player = PlayerMovement.Instance.transform;
+            return;
         }
+
+        GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
+        if (playerObj != null) player = playerObj.transform;
     }
     #endregion
 
     #region Stage Progression
-    /// <summary>
-    /// 다음 스테이지로 이동
-    /// </summary>
     public void MoveToNextStage()
     {
-        currentStage++;
-
-        // 마지막 스테이지 체크
-        if (currentStage > lastStageIndex)
+        // 큐가 비었을 때만 스테이지 증가 및 큐 생성
+        if (pendingStageTypes.Count == 0)
         {
-            Debug.Log("Game Clear!");
-            OnGameClear();
-            return;
+            currentStage++;
+
+            if (currentStage > lastStageIndex)
+            {
+                Debug.Log("Game Clear!");
+                OnGameClear();
+                return;
+            }
+
+            EnqueueStageTypesForCurrentStage();
         }
 
-        // 스테이지 타입 결정
-        StageType nextStageType = DetermineStageType();
-
-        // 스테이지 이동
+        StageType nextStageType = pendingStageTypes.Dequeue();
         MoveToStage(nextStageType);
     }
 
-    /// <summary>
-    /// 스테이지 타입 결정
-    /// </summary>
-    private StageType DetermineStageType()
+    private void EnqueueStageTypesForCurrentStage()
     {
-        // 마지막 스테이지 = 보스
-        if (currentStage == lastStageIndex)
-        {
-            return StageType.Boss;
-        }
+        // Angel: 5, 10, 15
+        if (currentStage == 5 || currentStage == 10 || currentStage == 15)
+            pendingStageTypes.Enqueue(StageType.Angel);
 
-        // 10의 배수 = 천사 스테이지
-        if (currentStage % angelStageInterval == 0)
-        {
-            return StageType.Angel;
-        }
+        // Boss: 10, 20
+        if (currentStage == 10 || currentStage == 20)
+            pendingStageTypes.Enqueue(StageType.Boss);
 
-        // 나머지 = 일반 스테이지
-        return StageType.Normal;
+        // 아무 것도 없으면 Normal
+        if (pendingStageTypes.Count == 0)
+            pendingStageTypes.Enqueue(StageType.Normal);
     }
 
-    /// <summary>
-    /// 특정 타입의 스테이지로 이동
-    /// </summary>
     private void MoveToStage(StageType type)
     {
         StageInfo selectedStage = null;
@@ -150,22 +130,24 @@ public class StageManager : MonoBehaviour
         switch (type)
         {
             case StageType.Normal:
-                selectedStage = GetRandomStage(normalStages, usedNormalStageIndices);
+                bool isLv1 = currentStage <= 10;
+                selectedStage = GetRandomStage(
+                    isLv1 ? lv1NormalStages : lv2NormalStages,
+                    isLv1 ? usedLv1Normal : usedLv2Normal);
                 break;
-
             case StageType.Angel:
-                selectedStage = GetRandomStage(angelStages, usedAngelStageIndices);
+                selectedStage = GetRandomStage(angelStages, usedAngel);
                 break;
-
             case StageType.Boss:
-                selectedStage = GetRandomStage(bossStages, usedBossStageIndices);
+                selectedStage = GetRandomStage(bossStages, usedBoss);
                 break;
         }
 
         if (selectedStage != null && selectedStage.spawnPoint != null)
         {
             TeleportPlayer(selectedStage.spawnPoint.position);
-            Debug.Log($"Stage {currentStage}/{totalStages}: Moved to {selectedStage.stageName} ({type})");
+            PositionClearPointTrigger(selectedStage.clearPoint);
+            Debug.Log($"Stage {currentStage}/{totalStages}: {selectedStage.stageName} ({type})");
         }
         else
         {
@@ -173,9 +155,6 @@ public class StageManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 랜덤 스테이지 선택 (중복 방지)
-    /// </summary>
     private StageInfo GetRandomStage(List<StageInfo> stageList, List<int> usedIndices)
     {
         if (stageList == null || stageList.Count == 0)
@@ -184,34 +163,48 @@ public class StageManager : MonoBehaviour
             return null;
         }
 
-        // 모든 스테이지를 사용했으면 초기화
         if (usedIndices.Count >= stageList.Count)
-        {
             usedIndices.Clear();
-        }
 
-        // 사용 가능한 인덱스 찾기
         List<int> availableIndices = new List<int>();
         for (int i = 0; i < stageList.Count; i++)
         {
             if (!usedIndices.Contains(i))
-            {
                 availableIndices.Add(i);
-            }
         }
 
-        // 랜덤 선택
         int randomIndex = availableIndices[Random.Range(0, availableIndices.Count)];
         usedIndices.Add(randomIndex);
-
         return stageList[randomIndex];
     }
     #endregion
 
+    #region Clear Point Placement
+    private void PositionClearPointTrigger(Transform clearPoint)
+    {
+        if (clearPointTrigger == null)
+        {
+            Debug.LogWarning("ClearPointTrigger not assigned.");
+            return;
+        }
+
+        clearPointTrigger.gameObject.SetActive(false);
+        clearPointTrigger.ResetForNewStage(); // 상태 초기화
+
+        if (clearPoint != null)
+        {
+            clearPointTrigger.transform.position = clearPoint.position;
+            clearPointTrigger.transform.rotation = clearPoint.rotation;
+            clearPointTrigger.gameObject.SetActive(true);
+        }
+        else
+        {
+            Debug.LogWarning("Clear point not set for this stage.");
+        }
+    }
+    #endregion
+
     #region Player Movement
-    /// <summary>
-    /// 플레이어 텔레포트
-    /// </summary>
     private void TeleportPlayer(Vector3 position)
     {
         if (player == null)
@@ -220,99 +213,62 @@ public class StageManager : MonoBehaviour
             return;
         }
 
-        // NavMeshAgent가 있다면 일시적으로 비활성화
-        UnityEngine.AI.NavMeshAgent agent = player.GetComponent<UnityEngine.AI.NavMeshAgent>();
-        if (agent != null)
-        {
-            agent.enabled = false;
-        }
+        NavMeshAgent agent = player.GetComponent<NavMeshAgent>();
+        if (agent != null) agent.enabled = false;
 
-        // 위치 이동
         player.position = position;
 
         Rigidbody rb = player.GetComponent<Rigidbody>();
         if (rb != null)
         {
-            rb.linearVelocity = Vector3.zero; 
+            rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
 
-        // NavMeshAgent 재활성화
-        if (agent != null)
-        {
-            agent.enabled = true;
-        }
+        if (agent != null) agent.enabled = true;
 
         Debug.Log($"Player teleported to: {position}");
     }
     #endregion
 
     #region Game Events
-    /// <summary>
-    /// 스테이지 클리어 (모든 적 처치 시 호출)
-    /// </summary>
     public void OnStageClear()
     {
         Debug.Log($"Stage {currentStage} Clear!");
-
-        // 다음 스테이지로 이동
         MoveToNextStage();
     }
 
-    /// <summary>
-    /// 게임 클리어
-    /// </summary>
     private void OnGameClear()
     {
         Debug.Log("All stages cleared! Game Complete!");
-        // TODO: 게임 클리어 UI 표시, 엔딩 등
+        // TODO: 게임 클리어 UI 등
     }
     #endregion
 
     #region Debug
-    /// <summary>
-    /// 특정 스테이지로 강제 이동 (디버그용)
-    /// </summary>
     public void DebugMoveToStage(int stageNumber)
     {
         currentStage = stageNumber - 1;
+        pendingStageTypes.Clear();
         MoveToNextStage();
     }
 
-    /// <summary>
-    /// Gizmos로 스폰 포인트 시각화
-    /// </summary>
     private void OnDrawGizmos()
     {
-        // Normal stages
         Gizmos.color = Color.green;
-        foreach (var stage in normalStages)
-        {
-            if (stage.spawnPoint != null)
-            {
-                Gizmos.DrawWireSphere(stage.spawnPoint.position, 0.5f);
-            }
-        }
+        foreach (var s in lv1NormalStages)
+            if (s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 0.5f);
 
-        // Angel stages
+        foreach (var s in lv2NormalStages)
+            if (s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 0.5f);
+
         Gizmos.color = Color.cyan;
-        foreach (var stage in angelStages)
-        {
-            if (stage.spawnPoint != null)
-            {
-                Gizmos.DrawWireSphere(stage.spawnPoint.position, 0.7f);
-            }
-        }
+        foreach (var s in angelStages)
+            if (s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 0.7f);
 
-        // Boss stages
         Gizmos.color = Color.red;
-        foreach (var stage in bossStages)
-        {
-            if (stage.spawnPoint != null)
-            {
-                Gizmos.DrawWireSphere(stage.spawnPoint.position, 1f);
-            }
-        }
+        foreach (var s in bossStages)
+            if (s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 1f);
     }
     #endregion
 }

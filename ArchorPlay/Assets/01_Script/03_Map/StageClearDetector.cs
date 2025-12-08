@@ -1,74 +1,89 @@
-using UnityEngine;
 using System.Linq;
+using UnityEngine;
 
-/// <summary>
-/// 스테이지 클리어 조건 감지 (모든 적 처치)
-/// </summary>
 public class StageClearDetector : MonoBehaviour
 {
-    [Header("Detection Settings")]
-    [SerializeField] private LayerMask enemyLayer;
-    [SerializeField] private float checkInterval = 1f;  // 체크 주기
+    [Header("Player Detection")]
+    [SerializeField] private string playerTag = "Player";
+    [SerializeField] private Collider clearPointTrigger;   // 공용 트리거 콜라이더
+
+    [Header("Enemy Detection")]
+    [SerializeField] private bool filterByParent = true;   // true면 enemyRoot 하위 적만 카운트
+    [SerializeField] private Transform enemyRoot;          // 비우면 this.transform
+    [SerializeField] private float checkInterval = 1f;
 
     private float nextCheckTime;
+    private bool enemiesCleared = false;
     private bool stageCleared = false;
+
+    private void Reset()
+    {
+        enemyRoot = transform;
+    }
+
+    private void Awake()
+    {
+        if (clearPointTrigger == null)
+            clearPointTrigger = GetComponent<Collider>();
+        if (enemyRoot == null)
+            enemyRoot = transform;
+    }
+
+    private void OnEnable()
+    {
+        enemiesCleared = false;
+        stageCleared = false;
+    }
 
     private void Update()
     {
-        // 이미 클리어했으면 체크 안함
-        if (stageCleared)
-            return;
-
-        // 일정 간격으로 체크
-        if (Time.time < nextCheckTime)
-            return;
-
+        if (stageCleared || enemiesCleared) return;
+        if (Time.time < nextCheckTime) return;
         nextCheckTime = Time.time + checkInterval;
-
-        // 적이 모두 죽었는지 체크
         CheckEnemies();
     }
 
-    /// <summary>
-    /// 살아있는 적 확인
-    /// </summary>
     private void CheckEnemies()
     {
-        // Scene의 모든 EnemyHealth 컴포넌트 찾기
-        EnemyHealth[] enemies = FindObjectsByType<EnemyHealth>(FindObjectsSortMode.None);
+        EnemyHealth[] enemies = filterByParent
+            ? enemyRoot.GetComponentsInChildren<EnemyHealth>(includeInactive: false)
+            : FindObjectsByType<EnemyHealth>(FindObjectsSortMode.None);
 
-        // 살아있는 적 필터링
-        var aliveEnemies = enemies.Where(e => e != null && !e.IsDead && e.gameObject.activeInHierarchy).ToArray();
-
-        Debug.Log($"Alive enemies: {aliveEnemies.Length}");
-
-        // 모든 적이 죽었으면 스테이지 클리어
-        if (aliveEnemies.Length == 0)
-        {
-            OnStageClear();
-        }
+        var alive = enemies.Where(e => e != null && !e.IsDead && e.gameObject.activeInHierarchy).ToArray();
+        if (alive.Length == 0)
+            enemiesCleared = true; // 이제 클리어 포인트로 가면 클리어
     }
 
-    /// <summary>
-    /// 스테이지 클리어 처리
-    /// </summary>
+    private void OnTriggerEnter(Collider other)
+    {
+        if (stageCleared) return;
+        if (clearPointTrigger == null) return;
+        if (!other.CompareTag(playerTag)) return;
+
+        if (!enemiesCleared)
+        {
+            Debug.Log("Cannot clear: enemies remain.");
+            return; // 적이 남아 있으면 클리어 불가
+        }
+
+        OnStageClear();
+    }
+
     private void OnStageClear()
     {
         stageCleared = true;
-        Debug.Log("Stage Clear!");
+        Debug.Log("Stage Clear (enemies dead + clear point)!");
 
-        // StageManager에 알림
         if (StageManager.Instance != null)
-        {
             StageManager.Instance.OnStageClear();
-        }
+        else
+            Debug.LogError("StageManager not found!");
     }
 
-    /// <summary>
-    /// 새 스테이지 시작 시 리셋
-    /// </summary>
     public void ResetForNewStage()
     {
+        enemiesCleared = false;
         stageCleared = false;
+        nextCheckTime = 0f;
     }
 }
