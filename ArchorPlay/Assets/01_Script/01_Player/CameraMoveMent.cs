@@ -1,7 +1,4 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
 public class CameraMovement : MonoBehaviour
 {
@@ -14,8 +11,8 @@ public class CameraMovement : MonoBehaviour
                 instance = FindFirstObjectByType<CameraMovement>();
                 if (instance == null)
                 {
-                    var instanceContainer = new GameObject("CameraMovement");
-                    instance = instanceContainer.AddComponent<CameraMovement>();
+                    var go = new GameObject("CameraMovement");
+                    instance = go.AddComponent<CameraMovement>();
                 }
             }
             return instance;
@@ -23,34 +20,65 @@ public class CameraMovement : MonoBehaviour
     }
     private static CameraMovement instance;
 
-    public GameObject Player;
+    [Header("Follow Target")]
+    [SerializeField] private Transform player;
 
-    public float offsetY = 45f;
-    public float offsetZ = -40f;
+    [Header("Top-Down Offset")]
+    [SerializeField] private Vector3 offset = new Vector3(0f, 45f, -40f); // 위에서 내려보는 위치
 
-    private Vector3 cameraPosition;
+    [Header("Follow Settings")]
+    [SerializeField] private float followLerp = 10f; // 0이면 순간 이동, 높을수록 부드럽게
 
-    void LateUpdate()
+    [Header("Camera Rotation (Fixed)")]
+    [SerializeField] private Vector3 eulerAngles = new Vector3(60f, 0f, 0f); // 탑뷰 각도 고정
+
+    private void Awake()
     {
-        if (Player == null)
+        // 싱글톤 유지
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
             return;
-        cameraPosition = transform.position;
-
-        cameraPosition.y = Player.transform.position.y + offsetY;
-        cameraPosition.z = Player.transform.position.z + offsetZ;
-
-        transform.position = cameraPosition;
+        }
+        instance = this;
     }
 
-    public void CameraNextRoom()
+    private void Start()
     {
-        if (Player == null)
-            return;
+        // 초기 회전 고정
+        transform.rotation = Quaternion.Euler(eulerAngles);
+    }
 
+    private void LateUpdate()
+    {
+        if (player == null) return;
 
-        cameraPosition = transform.position;
-        cameraPosition.x = Player.transform.position.x;
+        Vector3 targetPos = player.position + offset;
+        if (followLerp <= 0f)
+            transform.position = targetPos;
+        else
+            transform.position = Vector3.Lerp(transform.position, targetPos, followLerp * Time.deltaTime);
 
-        transform.position = cameraPosition;
+        // 회전 고정 유지
+        transform.rotation = Quaternion.Euler(eulerAngles);
+    }
+
+    /// <summary>
+    /// 외부에서 플레이어 할당 (예: StageManager에서 스폰 후)
+    /// </summary>
+    public void SetPlayer(Transform target, bool snapNow = true)
+    {
+        player = target;
+        if (snapNow) SnapToPlayer();
+    }
+
+    /// <summary>
+    /// 맵/스테이지 전환 시 카메라를 즉시 맞추기
+    /// </summary>
+    public void SnapToPlayer()
+    {
+        if (player == null) return;
+        transform.position = player.position + offset;
+        transform.rotation = Quaternion.Euler(eulerAngles);
     }
 }
