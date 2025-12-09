@@ -4117,7 +4117,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StageClearDetector
   playerTag: Player
-  clearPointTrigger: {fileID: 0}
+  clearPointTrigger: {fileID: 301498656}
   filterByParent: 1
   enemyRoot: {fileID: 301498658}
   checkInterval: 1
@@ -9596,7 +9596,7 @@ Transform:
   m_GameObject: {fileID: 515402517}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.4, y: 0, z: -8.4}
+  m_LocalPosition: {x: 2.7, y: 0, z: -8.4}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
