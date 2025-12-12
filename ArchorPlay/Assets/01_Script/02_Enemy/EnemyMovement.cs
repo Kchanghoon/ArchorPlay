@@ -66,16 +66,19 @@ public class EnemyMovement : MonoBehaviour
     {
         if (agent == null) return;
 
-        // 공격 범위만큼 떨어진 거리에서 멈춤
+        // 이동 설정
         agent.stoppingDistance = attackRange;
-
-        // 회전 속도 (선택사항)
         agent.angularSpeed = 120f;
-
-        // 가속도 (선택사항)
         agent.acceleration = 8f;
-    }
 
+        // 충돌 회피 설정
+        agent.avoidancePriority = 50; // 플레이어(99)보다 낮음 = 플레이어를 피함
+        agent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
+        agent.radius = 0.4f; // 충돌 반경 줄이기
+
+        // 높이 변화 방지 (경사로나 계단 없으면 활성화)
+        agent.baseOffset = 0f;
+    }
     /// <summary>
     /// 추적 상태 업데이트
     /// </summary>

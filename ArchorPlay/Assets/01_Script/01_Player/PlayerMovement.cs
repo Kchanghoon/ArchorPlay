@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
+using UnityEngine.AI;
 
 /// <summary>
 /// 플레이어 이동 및 무기 관리 컴포넌트
@@ -20,6 +21,14 @@ public class PlayerMovement : MonoBehaviour
             return;
         }
         Instance = this;
+
+        // ⭐ NavMeshAgent 즉시 비활성화 (가장 먼저 처리)
+        NavMeshAgent agent = GetComponent<NavMeshAgent>();
+        if (agent != null)
+        {
+            agent.enabled = false;
+            Debug.Log("✅ NavMeshAgent disabled in Awake");
+        }
     }
     #endregion
 
@@ -54,8 +63,16 @@ public class PlayerMovement : MonoBehaviour
     #region Properties
     public PlayerState CurrentState => currentState;
 
-    public bool IsMoving => rb != null && rb.linearVelocity.sqrMagnitude > movementThreshold;
-
+    public bool IsMoving
+    {
+        get
+        {
+            if (rb == null) return false;
+            // Y축을 제외한 수평 이동만 체크
+            float horizontalSpeed = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).sqrMagnitude;
+            return horizontalSpeed > movementThreshold;
+        }
+    }
     public bool IsDead => currentState == PlayerState.Dead;
 
     public bool IsAiming => currentState == PlayerState.Aiming || currentState == PlayerState.Attacking;
@@ -88,6 +105,16 @@ public class PlayerMovement : MonoBehaviour
         }
 
         HandleMovement();
+
+        // 안전장치: Y축 속도가 비정상적으로 생기면 제거
+        if (Mathf.Abs(rb.linearVelocity.y) > 0.01f)
+        {
+            rb.linearVelocity = new Vector3(
+                rb.linearVelocity.x,
+                0,
+                rb.linearVelocity.z
+            );
+        }
     }
     #endregion
 
@@ -95,6 +122,15 @@ public class PlayerMovement : MonoBehaviour
     private void InitializeComponents()
     {
         rb = GetComponent<Rigidbody>();
+
+        if (rb != null)
+        {
+            rb.isKinematic = false; // ⭐ Kinematic 끄기
+            rb.constraints = RigidbodyConstraints.FreezeRotation;
+            rb.useGravity = false;
+            rb.interpolation = RigidbodyInterpolation.Interpolate; // 부드러운 움직임
+            Debug.Log($"✅ Rigidbody initialized: isKinematic={rb.isKinematic}, constraints={rb.constraints}");
+        }
 
         if (animator == null)
             animator = GetComponent<Animator>();
@@ -183,7 +219,11 @@ public class PlayerMovement : MonoBehaviour
     #region Movement
     private void HandleMovement()
     {
-        if (joystick == null) return;
+        if (joystick == null)
+        {
+            Debug.LogWarning("Joystick is null!");
+            return;
+        }
 
         Vector3 input = joystick.joyVec;
 
@@ -194,12 +234,14 @@ public class PlayerMovement : MonoBehaviour
             return;
         }
 
+        // 현재 Y 위치 저장 (높이 고정용)
+        float currentY = transform.position.y;
+
         // 입력이 없을 때
         if (input.sqrMagnitude < 0.001f)
         {
             rb.linearVelocity = Vector3.zero;
 
-            // 타겟이 있으면 조준 상태, 없으면 Idle
             if (targeting != null && targeting.CurrentTarget != null)
             {
                 SetState(PlayerState.Aiming);
@@ -213,7 +255,13 @@ public class PlayerMovement : MonoBehaviour
 
         // 이동 처리
         Vector3 moveDir = new Vector3(input.x, 0, input.y).normalized;
-        rb.linearVelocity = moveDir * moveSpeed;
+
+        // Y축 속도는 항상 0으로
+        rb.linearVelocity = new Vector3(
+            moveDir.x * moveSpeed,
+            0,
+            moveDir.z * moveSpeed
+        );
 
         SetState(PlayerState.Moving);
 
@@ -221,7 +269,16 @@ public class PlayerMovement : MonoBehaviour
         HandleRotation(moveDir);
 
         // 애니메이션 업데이트
-        UpdateAnimation(rb.linearVelocity.magnitude, false);
+        float horizontalSpeed = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude;
+        UpdateAnimation(horizontalSpeed, false);
+
+        // Y 위치 강제 보정 (벽 충돌 시 떠오름 방지)
+        Vector3 pos = transform.position;
+        if (Mathf.Abs(pos.y - currentY) > 0.05f)
+        {
+            pos.y = currentY;
+            transform.position = pos;
+        }
     }
 
     private void HandleRotation(Vector3 moveDir)
