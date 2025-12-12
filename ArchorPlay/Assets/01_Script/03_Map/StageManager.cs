@@ -24,6 +24,7 @@ public class StageManager : MonoBehaviour
         public string stageName;
         public Transform spawnPoint;
         public Transform clearPoint; // 스테이지별 클리어 포인트 위치
+        public Transform enemyRoot;  // [MOD] 스테이지별 적 루트(전멸 체크용)
         public StageType type;
     }
 
@@ -146,7 +147,7 @@ public class StageManager : MonoBehaviour
         if (selectedStage != null && selectedStage.spawnPoint != null)
         {
             TeleportPlayer(selectedStage.spawnPoint.position);
-            PositionClearPointTrigger(selectedStage.clearPoint);
+            PositionClearPointTrigger(selectedStage.clearPoint, selectedStage.enemyRoot); // [MOD] enemyRoot 전달
             Debug.Log($"Stage {currentStage}/{totalStages}: {selectedStage.stageName} ({type})");
         }
         else
@@ -180,28 +181,21 @@ public class StageManager : MonoBehaviour
     #endregion
 
     #region Clear Point Placement
-    private void PositionClearPointTrigger(Transform clearPoint)
+    private void PositionClearPointTrigger(Transform clearPoint, Transform enemyRoot)
     {
-        if (clearPointTrigger == null)
-        {
-            Debug.LogWarning("ClearPointTrigger not assigned.");
-            return;
-        }
-
         clearPointTrigger.gameObject.SetActive(false);
-        clearPointTrigger.ResetForNewStage(); // 상태 초기화
+        clearPointTrigger.ResetForNewStage();
+
+        clearPointTrigger.SetEnemyRoot(enemyRoot);
+        Debug.Log($"[StageManager] Inject enemyRoot={(enemyRoot ? enemyRoot.name : "NULL")}");
 
         if (clearPoint != null)
         {
-            clearPointTrigger.transform.position = clearPoint.position;
-            clearPointTrigger.transform.rotation = clearPoint.rotation;
+            clearPointTrigger.transform.SetPositionAndRotation(clearPoint.position, clearPoint.rotation);
             clearPointTrigger.gameObject.SetActive(true);
         }
-        else
-        {
-            Debug.LogWarning("Clear point not set for this stage.");
-        }
     }
+
     #endregion
 
     #region Player Movement

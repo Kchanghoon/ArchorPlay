@@ -4116,9 +4116,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe22296cd2d497d48a5a256cf0ed16a0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StageClearDetector
-  enemyLayer:
-    serializedVersion: 2
-    m_Bits: 128
+  playerTag: Player
+  clearPointTrigger: {fileID: 0}
+  filterByParent: 0
+  enemyRoot: {fileID: 0}
   checkInterval: 1
 --- !u!4 &301498658
 Transform:
@@ -11442,69 +11443,85 @@ MonoBehaviour:
   - stageName: 'Sample Map '
     spawnPoint: {fileID: 303723144}
     clearPoint: {fileID: 515402518}
+    enemyRoot: {fileID: 584771584}
     type: 0
   - stageName: Sample Map  (1)
     spawnPoint: {fileID: 668049801}
     clearPoint: {fileID: 1598473645}
+    enemyRoot: {fileID: 584771584}
     type: 0
   - stageName: Sample Map  (2)
     spawnPoint: {fileID: 1573997196}
     clearPoint: {fileID: 611429959}
+    enemyRoot: {fileID: 0}
     type: 0
   - stageName: Sample Map  (3)
     spawnPoint: {fileID: 765119692}
     clearPoint: {fileID: 246900457}
+    enemyRoot: {fileID: 0}
     type: 0
   - stageName: Sample Map  (4)
     spawnPoint: {fileID: 330619213}
     clearPoint: {fileID: 1038758861}
+    enemyRoot: {fileID: 0}
     type: 0
   - stageName: Sample Map  (5)
     spawnPoint: {fileID: 585830964}
     clearPoint: {fileID: 1804733400}
+    enemyRoot: {fileID: 0}
     type: 0
   - stageName: Sample Map  (6)
     spawnPoint: {fileID: 1002008668}
     clearPoint: {fileID: 939675102}
+    enemyRoot: {fileID: 0}
     type: 0
   - stageName: Sample Map  (7)
     spawnPoint: {fileID: 1730885495}
     clearPoint: {fileID: 1808471206}
+    enemyRoot: {fileID: 0}
     type: 0
   - stageName: Sample Map  (8)
     spawnPoint: {fileID: 614644100}
     clearPoint: {fileID: 2054523763}
+    enemyRoot: {fileID: 0}
     type: 0
   - stageName: Sample Map  (8)
     spawnPoint: {fileID: 1820243618}
     clearPoint: {fileID: 1305727513}
+    enemyRoot: {fileID: 0}
     type: 0
   lv2NormalStages: []
   angelStages:
   - stageName: AngelStage1
     spawnPoint: {fileID: 0}
     clearPoint: {fileID: 0}
+    enemyRoot: {fileID: 0}
     type: 1
   - stageName: AngelStage1 (1)
     spawnPoint: {fileID: 0}
     clearPoint: {fileID: 0}
+    enemyRoot: {fileID: 0}
     type: 1
   - stageName: AngelStage1 (1)
     spawnPoint: {fileID: 0}
     clearPoint: {fileID: 0}
+    enemyRoot: {fileID: 0}
     type: 1
   bossStages:
   - stageName: BossStage
     spawnPoint: {fileID: 0}
     clearPoint: {fileID: 0}
+    enemyRoot: {fileID: 0}
     type: 2
   - stageName: BossStage (1)
     spawnPoint: {fileID: 0}
     clearPoint: {fileID: 0}
+    enemyRoot: {fileID: 0}
     type: 2
   - stageName: BossStage (2)
     spawnPoint: {fileID: 0}
     clearPoint: {fileID: 0}
+    enemyRoot: {fileID: 0}
     type: 2
   totalStages: 20
   lastStageIndex: 20
@@ -11646,7 +11663,7 @@ GameObject:
   m_Component:
   - component: {fileID: 584771584}
   m_Layer: 7
-  m_Name: Enemy
+  m_Name: EnemyRoot
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
