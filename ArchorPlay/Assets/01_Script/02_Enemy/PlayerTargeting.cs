@@ -118,9 +118,6 @@ public class PlayerTargeting : MonoBehaviour
 
         foreach (Collider enemyCollider in enemies)
         {
-            // 디버그: 감지된 적 출력
-            Debug.Log($"Detected enemy: {enemyCollider.name}, Active: {enemyCollider.gameObject.activeInHierarchy}");
-
             if (!IsEnemyVisible(enemyCollider, eyePosition, out float distance))
                 continue;
 
@@ -131,10 +128,6 @@ public class PlayerTargeting : MonoBehaviour
             }
         }
 
-        if (closestEnemy != null)
-        {
-            Debug.Log($"Current target: {closestEnemy.name}");
-        }
 
         return closestEnemy;
     }
