@@ -6,6 +6,7 @@ public class StageManager : MonoBehaviour
 {
     #region Singleton
     public static StageManager Instance { get; private set; }
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -22,9 +23,18 @@ public class StageManager : MonoBehaviour
     public class StageInfo
     {
         public string stageName;
+
+        [Header("Room Root (B안)")]
+        public Transform roomRoot;                 // 방 전체 루트(맵+EnemyRoot 포함). 여기만 활성화
+
+        [Header("Player / Clear")]
         public Transform spawnPoint;
-        public Transform clearPoint; // 스테이지별 클리어 포인트 위치
-        public Transform enemyRoot;  // [MOD] 스테이지별 적 루트(전멸 체크용)
+        public Transform clearPoint;
+
+        [Header("Enemy")]
+        public Transform enemyRoot;                // 이 방의 적 부모(전멸 체크/스폰 부모)
+        public Transform[] enemySpawnPoints;       // 적 스폰 포인트 여러 개
+
         public StageType type;
     }
 
@@ -45,6 +55,13 @@ public class StageManager : MonoBehaviour
     [Header("References")]
     [SerializeField] private Transform player;
     [SerializeField] private StageClearDetector clearPointTrigger; // 공용 트리거
+
+    [Header("Enemy Spawn")]
+    [SerializeField] private GameObject[] enemyPrefabs;
+    [SerializeField] private int minEnemyCount = 3;
+    [SerializeField] private int maxEnemyCount = 6;
+    [SerializeField] private bool clearOldEnemiesInThisRoot = true;
+    [SerializeField] private bool uniqueSpawnPointUntilExhausted = true; // 스폰포인트를 섞고 순환 사용
     #endregion
 
     #region Private Fields
@@ -55,6 +72,8 @@ public class StageManager : MonoBehaviour
     private List<int> usedLv2Normal = new List<int>();
     private List<int> usedAngel = new List<int>();
     private List<int> usedBoss = new List<int>();
+
+    private StageInfo currentStageInfo; // 현재 활성 스테이지(방)
     #endregion
 
     #region Properties
@@ -131,29 +150,49 @@ public class StageManager : MonoBehaviour
         switch (type)
         {
             case StageType.Normal:
-                bool isLv1 = currentStage <= 10;
-                selectedStage = GetRandomStage(
-                    isLv1 ? lv1NormalStages : lv2NormalStages,
-                    isLv1 ? usedLv1Normal : usedLv2Normal);
-                break;
+                {
+                    bool isLv1 = currentStage <= 10;
+                    selectedStage = GetRandomStage(
+                        isLv1 ? lv1NormalStages : lv2NormalStages,
+                        isLv1 ? usedLv1Normal : usedLv2Normal
+                    );
+                    break;
+                }
             case StageType.Angel:
                 selectedStage = GetRandomStage(angelStages, usedAngel);
                 break;
+
             case StageType.Boss:
                 selectedStage = GetRandomStage(bossStages, usedBoss);
                 break;
         }
 
-        if (selectedStage != null && selectedStage.spawnPoint != null)
-        {
-            TeleportPlayer(selectedStage.spawnPoint.position);
-            PositionClearPointTrigger(selectedStage.clearPoint, selectedStage.enemyRoot); // [MOD] enemyRoot 전달
-            Debug.Log($"Stage {currentStage}/{totalStages}: {selectedStage.stageName} ({type})");
-        }
-        else
+        if (selectedStage == null)
         {
             Debug.LogError($"Failed to load stage! Type: {type}");
+            return;
         }
+
+        if (selectedStage.spawnPoint == null)
+        {
+            Debug.LogError($"[StageManager] spawnPoint is null: {selectedStage.stageName}");
+            return;
+        }
+
+        // 1) 현재 방만 활성화 (B안)
+        currentStageInfo = selectedStage;
+        SetActiveOnly(currentStageInfo);
+
+        // 2) 플레이어 이동
+        TeleportPlayer(currentStageInfo.spawnPoint.position);
+
+        // 3) 클리어 트리거 위치 + 전멸 체크 루트 주입
+        PositionClearPointTrigger(currentStageInfo.clearPoint, currentStageInfo.enemyRoot);
+
+        // 4) 적 스폰 (현재 enemyRoot 아래만)
+        SpawnEnemiesForStage(currentStageInfo);
+
+        Debug.Log($"Stage {currentStage}/{totalStages}: {currentStageInfo.stageName} ({type})");
     }
 
     private StageInfo GetRandomStage(List<StageInfo> stageList, List<int> usedIndices)
@@ -169,10 +208,8 @@ public class StageManager : MonoBehaviour
 
         List<int> availableIndices = new List<int>();
         for (int i = 0; i < stageList.Count; i++)
-        {
             if (!usedIndices.Contains(i))
                 availableIndices.Add(i);
-        }
 
         int randomIndex = availableIndices[Random.Range(0, availableIndices.Count)];
         usedIndices.Add(randomIndex);
@@ -180,12 +217,112 @@ public class StageManager : MonoBehaviour
     }
     #endregion
 
+    #region B안: Room 활성화
+    private void SetActiveOnly(StageInfo current)
+    {
+        void Apply(List<StageInfo> list)
+        {
+            foreach (var s in list)
+            {
+                if (s == null) continue;
+                if (s.roomRoot == null) continue;
+
+                bool active = (s == current);
+                if (s.roomRoot.gameObject.activeSelf != active)
+                    s.roomRoot.gameObject.SetActive(active);
+            }
+        }
+
+        Apply(lv1NormalStages);
+        Apply(lv2NormalStages);
+        Apply(angelStages);
+        Apply(bossStages);
+    }
+    #endregion
+
+    #region Enemy Spawn
+    private void SpawnEnemiesForStage(StageInfo stage)
+    {
+        if (stage.enemyRoot == null)
+        {
+            Debug.LogError($"[StageManager] enemyRoot is null: {stage.stageName}");
+            return;
+        }
+
+        if (stage.enemySpawnPoints == null || stage.enemySpawnPoints.Length == 0)
+        {
+            Debug.LogError($"[StageManager] enemySpawnPoints is empty: {stage.stageName}");
+            return;
+        }
+
+        if (enemyPrefabs == null || enemyPrefabs.Length == 0)
+        {
+            Debug.LogError("[StageManager] enemyPrefabs is empty");
+            return;
+        }
+
+        if (minEnemyCount > maxEnemyCount)
+            (minEnemyCount, maxEnemyCount) = (maxEnemyCount, minEnemyCount);
+
+        if (clearOldEnemiesInThisRoot)
+            ClearChildren(stage.enemyRoot);
+
+        int count = Random.Range(minEnemyCount, maxEnemyCount + 1);
+
+        // 스폰 포인트 섞기 (중복 최소화 용)
+        var points = new List<Transform>(stage.enemySpawnPoints);
+        Shuffle(points);
+
+        for (int i = 0; i < count; i++)
+        {
+            Transform pt = uniqueSpawnPointUntilExhausted
+                ? points[i % points.Count]
+                : stage.enemySpawnPoints[Random.Range(0, stage.enemySpawnPoints.Length)];
+
+            if (pt == null) continue;
+
+            GameObject prefab = enemyPrefabs[Random.Range(0, enemyPrefabs.Length)];
+            if (prefab == null) continue;
+
+            Instantiate(prefab, pt.position, pt.rotation, stage.enemyRoot);
+        }
+    }
+
+    private static void Shuffle<T>(IList<T> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
+    }
+
+    private void ClearChildren(Transform root)
+    {
+        if (root == null) return;
+
+        for (int i = root.childCount - 1; i >= 0; i--)
+        {
+            var child = root.GetChild(i);
+            if (child != null)
+                Destroy(child.gameObject);
+        }
+    }
+    #endregion
+
     #region Clear Point Placement
     private void PositionClearPointTrigger(Transform clearPoint, Transform enemyRoot)
     {
+        if (clearPointTrigger == null)
+        {
+            Debug.LogError("[StageManager] clearPointTrigger not assigned");
+            return;
+        }
+
         clearPointTrigger.gameObject.SetActive(false);
         clearPointTrigger.ResetForNewStage();
 
+        // 전멸 체크는 이 enemyRoot만 보게
         clearPointTrigger.SetEnemyRoot(enemyRoot);
         Debug.Log($"[StageManager] Inject enemyRoot={(enemyRoot ? enemyRoot.name : "NULL")}");
 
@@ -194,8 +331,11 @@ public class StageManager : MonoBehaviour
             clearPointTrigger.transform.SetPositionAndRotation(clearPoint.position, clearPoint.rotation);
             clearPointTrigger.gameObject.SetActive(true);
         }
+        else
+        {
+            Debug.LogWarning($"[StageManager] clearPoint is null: {currentStageInfo?.stageName}");
+        }
     }
-
     #endregion
 
     #region Player Movement
@@ -207,22 +347,46 @@ public class StageManager : MonoBehaviour
             return;
         }
 
-        NavMeshAgent agent = player.GetComponent<NavMeshAgent>();
-        if (agent != null) agent.enabled = false;
-
-        player.position = position;
-
         Rigidbody rb = player.GetComponent<Rigidbody>();
+
+        // 1) 목표 위치 (NavMesh 보정)
+        Vector3 finalPos = position;
+        if (NavMesh.SamplePosition(position, out var hit, 5f, NavMesh.AllAreas))
+            finalPos = hit.position;
+
+        // 2) Rigidbody 정지
         if (rb != null)
         {
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
 
-        if (agent != null) agent.enabled = true;
+        // 3) Transform으로 직접 이동
+        player.position = finalPos;
 
-        Debug.Log($"Player teleported to: {position}");
+        // 4) NavMeshAgent 위치 동기화 (있다면)
+        NavMeshAgent agent = player.GetComponent<NavMeshAgent>();
+        if (agent != null && agent.enabled)
+        {
+            // Agent의 nextPosition을 새 위치로 강제 설정
+            agent.nextPosition = finalPos;
+            agent.ResetPath();
+        }
+
+        Debug.Log($"Player teleported to: {finalPos}");
     }
+
+    private System.Collections.IEnumerator WarpAfterFrame(NavMeshAgent agent, Vector3 position)
+    {
+        yield return null; // 한 프레임 대기
+
+        if (agent != null && agent.enabled)
+        {
+            agent.Warp(position);
+            agent.ResetPath();
+        }
+    }
+
     #endregion
 
     #region Game Events
@@ -251,18 +415,18 @@ public class StageManager : MonoBehaviour
     {
         Gizmos.color = Color.green;
         foreach (var s in lv1NormalStages)
-            if (s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 0.5f);
+            if (s != null && s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 0.5f);
 
         foreach (var s in lv2NormalStages)
-            if (s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 0.5f);
+            if (s != null && s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 0.5f);
 
         Gizmos.color = Color.cyan;
         foreach (var s in angelStages)
-            if (s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 0.7f);
+            if (s != null && s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 0.7f);
 
         Gizmos.color = Color.red;
         foreach (var s in bossStages)
-            if (s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 1f);
+            if (s != null && s.spawnPoint) Gizmos.DrawWireSphere(s.spawnPoint.position, 1f);
     }
     #endregion
 }
