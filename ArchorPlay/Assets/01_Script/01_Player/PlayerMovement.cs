@@ -125,11 +125,16 @@ public class PlayerMovement : MonoBehaviour
 
         if (rb != null)
         {
-            rb.isKinematic = false; // ⭐ Kinematic 끄기
+            rb.isKinematic = false;
             rb.constraints = RigidbodyConstraints.FreezeRotation;
             rb.useGravity = false;
-            rb.interpolation = RigidbodyInterpolation.Interpolate; // 부드러운 움직임
-            Debug.Log($"✅ Rigidbody initialized: isKinematic={rb.isKinematic}, constraints={rb.constraints}");
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
+
+            Debug.Log($"✅ RB Init - Kinematic: {rb.isKinematic}, Pos: {transform.position}");
+        }
+        else
+        {
+            Debug.LogError("❌ Rigidbody component not found!");
         }
 
         if (animator == null)
@@ -139,7 +144,13 @@ public class PlayerMovement : MonoBehaviour
             targeting = GetComponent<PlayerTargeting>();
 
         if (joystick == null)
+        {
             joystick = JoyStickMovement.Instance;
+            if (joystick == null)
+            {
+                Debug.LogError("❌ JoyStickMovement.Instance is NULL!");
+            }
+        }
     }
 
     private void CacheAnimationParameters()
@@ -424,4 +435,41 @@ public class PlayerMovement : MonoBehaviour
         public RuntimeAnimatorController controller;
     }
     #endregion
+
+    public void Teleport(Vector3 position)
+    {
+        Debug.Log($"🚀 Teleport called: {position}");
+
+        if (rb != null)
+        {
+            // 물리 초기화
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+
+            // Kinematic으로 임시 변경
+            bool wasKinematic = rb.isKinematic;
+            rb.isKinematic = true;
+
+            // 위치 설정
+            transform.position = position;
+
+            // 한 프레임 후 Kinematic 복원
+            StartCoroutine(RestoreKinematicAfterFrame(wasKinematic));
+        }
+        else
+        {
+            transform.position = position;
+        }
+
+        Debug.Log($"✅ Teleported to: {transform.position}");
+    }
+
+    private IEnumerator RestoreKinematicAfterFrame(bool wasKinematic)
+    {
+        yield return new WaitForFixedUpdate();
+        if (rb != null)
+        {
+            rb.isKinematic = wasKinematic;
+        }
+    }
 }

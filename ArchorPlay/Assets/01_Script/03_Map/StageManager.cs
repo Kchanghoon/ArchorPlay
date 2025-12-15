@@ -1,3 +1,4 @@
+ï»¿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
@@ -24,16 +25,16 @@ public class StageManager : MonoBehaviour
     {
         public string stageName;
 
-        [Header("Room Root (B¾È)")]
-        public Transform roomRoot;                 // ¹æ ÀüÃ¼ ·çÆ®(¸Ê+EnemyRoot Æ÷ÇÔ). ¿©±â¸¸ È°¼ºÈ­
+        [Header("Room Root (Bì•ˆ)")]
+        public Transform roomRoot;                 // ë°© ì „ì²´ ë£¨íŠ¸(ë§µ+EnemyRoot í¬í•¨). ì—¬ê¸°ë§Œ í™œì„±í™”
 
         [Header("Player / Clear")]
         public Transform spawnPoint;
         public Transform clearPoint;
 
         [Header("Enemy")]
-        public Transform enemyRoot;                // ÀÌ ¹æÀÇ Àû ºÎ¸ğ(Àü¸ê Ã¼Å©/½ºÆù ºÎ¸ğ)
-        public Transform[] enemySpawnPoints;       // Àû ½ºÆù Æ÷ÀÎÆ® ¿©·¯ °³
+        public Transform enemyRoot;                // ì´ ë°©ì˜ ì  ë¶€ëª¨(ì „ë©¸ ì²´í¬/ìŠ¤í° ë¶€ëª¨)
+        public Transform[] enemySpawnPoints;       // ì  ìŠ¤í° í¬ì¸íŠ¸ ì—¬ëŸ¬ ê°œ
 
         public StageType type;
     }
@@ -54,14 +55,14 @@ public class StageManager : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private Transform player;
-    [SerializeField] private StageClearDetector clearPointTrigger; // °ø¿ë Æ®¸®°Å
+    [SerializeField] private StageClearDetector clearPointTrigger; // ê³µìš© íŠ¸ë¦¬ê±°
 
     [Header("Enemy Spawn")]
     [SerializeField] private GameObject[] enemyPrefabs;
     [SerializeField] private int minEnemyCount = 3;
     [SerializeField] private int maxEnemyCount = 6;
     [SerializeField] private bool clearOldEnemiesInThisRoot = true;
-    [SerializeField] private bool uniqueSpawnPointUntilExhausted = true; // ½ºÆùÆ÷ÀÎÆ®¸¦ ¼¯°í ¼øÈ¯ »ç¿ë
+    [SerializeField] private bool uniqueSpawnPointUntilExhausted = true; // ìŠ¤í°í¬ì¸íŠ¸ë¥¼ ì„ê³  ìˆœí™˜ ì‚¬ìš©
     #endregion
 
     #region Private Fields
@@ -73,7 +74,7 @@ public class StageManager : MonoBehaviour
     private List<int> usedAngel = new List<int>();
     private List<int> usedBoss = new List<int>();
 
-    private StageInfo currentStageInfo; // ÇöÀç È°¼º ½ºÅ×ÀÌÁö(¹æ)
+    private StageInfo currentStageInfo; // í˜„ì¬ í™œì„± ìŠ¤í…Œì´ì§€(ë°©)
     #endregion
 
     #region Properties
@@ -109,7 +110,7 @@ public class StageManager : MonoBehaviour
     #region Stage Progression
     public void MoveToNextStage()
     {
-        // Å¥°¡ ºñ¾úÀ» ¶§¸¸ ½ºÅ×ÀÌÁö Áõ°¡ ¹× Å¥ »ı¼º
+        // íê°€ ë¹„ì—ˆì„ ë•Œë§Œ ìŠ¤í…Œì´ì§€ ì¦ê°€ ë° í ìƒì„±
         if (pendingStageTypes.Count == 0)
         {
             currentStage++;
@@ -138,7 +139,7 @@ public class StageManager : MonoBehaviour
         if (currentStage == 10 || currentStage == 20)
             pendingStageTypes.Enqueue(StageType.Boss);
 
-        // ¾Æ¹« °Íµµ ¾øÀ¸¸é Normal
+        // ì•„ë¬´ ê²ƒë„ ì—†ìœ¼ë©´ Normal
         if (pendingStageTypes.Count == 0)
             pendingStageTypes.Enqueue(StageType.Normal);
     }
@@ -179,20 +180,45 @@ public class StageManager : MonoBehaviour
             return;
         }
 
-        // 1) ÇöÀç ¹æ¸¸ È°¼ºÈ­ (B¾È)
+        // 1) í˜„ì¬ ë°©ë§Œ í™œì„±í™” (Bì•ˆ)
         currentStageInfo = selectedStage;
         SetActiveOnly(currentStageInfo);
 
-        // 2) ÇÃ·¹ÀÌ¾î ÀÌµ¿
-        TeleportPlayer(currentStageInfo.spawnPoint.position);
+        // 2) ì½”ë£¨í‹´ìœ¼ë¡œ í”Œë ˆì´ì–´ ì´ë™ (í•œ í”„ë ˆì„ ëŒ€ê¸° í›„)
+        StartCoroutine(TeleportPlayerDelayed(currentStageInfo.spawnPoint.position));
 
-        // 3) Å¬¸®¾î Æ®¸®°Å À§Ä¡ + Àü¸ê Ã¼Å© ·çÆ® ÁÖÀÔ
+        // 3) í´ë¦¬ì–´ íŠ¸ë¦¬ê±° ìœ„ì¹˜ + ì „ë©¸ ì²´í¬ ë£¨íŠ¸ ì£¼ì…
         PositionClearPointTrigger(currentStageInfo.clearPoint, currentStageInfo.enemyRoot);
 
-        // 4) Àû ½ºÆù (ÇöÀç enemyRoot ¾Æ·¡¸¸)
+        // 4) ì  ìŠ¤í° (í˜„ì¬ enemyRoot ì•„ë˜ë§Œ)
         SpawnEnemiesForStage(currentStageInfo);
 
         Debug.Log($"Stage {currentStage}/{totalStages}: {currentStageInfo.stageName} ({type})");
+    }
+
+    // ìƒˆë¡œìš´ ì½”ë£¨í‹´ ë©”ì„œë“œ
+    private IEnumerator TeleportPlayerDelayed(Vector3 position)
+    {
+        yield return null;
+
+        if (player == null)
+        {
+            Debug.LogError("âŒ Player is null!");
+            yield break;
+        }
+
+        // PlayerMovementì˜ Teleport ë©”ì„œë“œ í˜¸ì¶œ
+        PlayerMovement playerMovement = player.GetComponent<PlayerMovement>();
+        if (playerMovement != null)
+        {
+            playerMovement.Teleport(position);
+        }
+        else
+        {
+            Debug.LogError("âŒ PlayerMovement component not found!");
+        }
+
+        yield return new WaitForFixedUpdate();
     }
 
     private StageInfo GetRandomStage(List<StageInfo> stageList, List<int> usedIndices)
@@ -217,7 +243,7 @@ public class StageManager : MonoBehaviour
     }
     #endregion
 
-    #region B¾È: Room È°¼ºÈ­
+    #region Bì•ˆ: Room í™œì„±í™”
     private void SetActiveOnly(StageInfo current)
     {
         void Apply(List<StageInfo> list)
@@ -269,7 +295,7 @@ public class StageManager : MonoBehaviour
 
         int count = Random.Range(minEnemyCount, maxEnemyCount + 1);
 
-        // ½ºÆù Æ÷ÀÎÆ® ¼¯±â (Áßº¹ ÃÖ¼ÒÈ­ ¿ë)
+        // ìŠ¤í° í¬ì¸íŠ¸ ì„ê¸° (ì¤‘ë³µ ìµœì†Œí™” ìš©)
         var points = new List<Transform>(stage.enemySpawnPoints);
         Shuffle(points);
 
@@ -322,7 +348,7 @@ public class StageManager : MonoBehaviour
         clearPointTrigger.gameObject.SetActive(false);
         clearPointTrigger.ResetForNewStage();
 
-        // Àü¸ê Ã¼Å©´Â ÀÌ enemyRoot¸¸ º¸°Ô
+        // ì „ë©¸ ì²´í¬ëŠ” ì´ enemyRootë§Œ ë³´ê²Œ
         clearPointTrigger.SetEnemyRoot(enemyRoot);
         Debug.Log($"[StageManager] Inject enemyRoot={(enemyRoot ? enemyRoot.name : "NULL")}");
 
@@ -343,42 +369,30 @@ public class StageManager : MonoBehaviour
     {
         if (player == null)
         {
-            Debug.LogError("Player not found!");
+            Debug.LogError("âŒ Player not found!");
             return;
         }
 
+        Debug.Log($"ğŸš€ Attempting teleport to: {position}");
+
         Rigidbody rb = player.GetComponent<Rigidbody>();
 
-        // 1) ¸ñÇ¥ À§Ä¡ (NavMesh º¸Á¤)
-        Vector3 finalPos = position;
-        if (NavMesh.SamplePosition(position, out var hit, 5f, NavMesh.AllAreas))
-            finalPos = hit.position;
-
-        // 2) Rigidbody Á¤Áö
+        // 1) Rigidbody ì •ì§€
         if (rb != null)
         {
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
 
-        // 3) TransformÀ¸·Î Á÷Á¢ ÀÌµ¿
-        player.position = finalPos;
+        // 2) ì§ì ‘ Transformìœ¼ë¡œ ì´ë™
+        player.position = position;
 
-        // 4) NavMeshAgent À§Ä¡ µ¿±âÈ­ (ÀÖ´Ù¸é)
-        NavMeshAgent agent = player.GetComponent<NavMeshAgent>();
-        if (agent != null && agent.enabled)
-        {
-            // AgentÀÇ nextPositionÀ» »õ À§Ä¡·Î °­Á¦ ¼³Á¤
-            agent.nextPosition = finalPos;
-            agent.ResetPath();
-        }
-
-        Debug.Log($"Player teleported to: {finalPos}");
+        Debug.Log($"âœ… Player teleported! New position: {player.position}");
     }
 
     private System.Collections.IEnumerator WarpAfterFrame(NavMeshAgent agent, Vector3 position)
     {
-        yield return null; // ÇÑ ÇÁ·¹ÀÓ ´ë±â
+        yield return null; // í•œ í”„ë ˆì„ ëŒ€ê¸°
 
         if (agent != null && agent.enabled)
         {
@@ -399,7 +413,7 @@ public class StageManager : MonoBehaviour
     private void OnGameClear()
     {
         Debug.Log("All stages cleared! Game Complete!");
-        // TODO: °ÔÀÓ Å¬¸®¾î UI µî
+        // TODO: ê²Œì„ í´ë¦¬ì–´ UI ë“±
     }
     #endregion
 
