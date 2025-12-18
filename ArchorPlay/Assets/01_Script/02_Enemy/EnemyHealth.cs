@@ -12,6 +12,25 @@ public class EnemyHealth : MonoBehaviour
     public bool IsDead => isDead;
     public int CurrentHp => currentHp;
 
+    [SerializeField] private int damageAmount = 100;
+    [SerializeField] private float attackCooldown = 1f;
+
+    private float lastAttackTime;
+
+    private void OnCollisionStay(Collision collision)
+    {
+        if (Time.time - lastAttackTime < attackCooldown)
+            return;
+
+        PlayerMovement player = collision.gameObject.GetComponent<PlayerMovement>();
+        if (player != null && !player.IsDead)
+        {
+            player.TakeDamage(damageAmount);
+            lastAttackTime = Time.time;
+            Debug.Log($"플레이어에게 {damageAmount} 데미지!");
+        }
+    }
+
     void Awake()
     {
         currentHp = maxHp;

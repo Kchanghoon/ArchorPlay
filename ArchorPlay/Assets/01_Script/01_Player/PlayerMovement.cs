@@ -13,6 +13,7 @@ public class PlayerMovement : MonoBehaviour
     #region Singleton
     public static PlayerMovement Instance { get; private set; }
 
+    private HPBar healthBar;
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -89,11 +90,31 @@ public class PlayerMovement : MonoBehaviour
         InitializeComponents();
         CacheAnimationParameters();
         InitializeWeapon();
+        healthBar = FindObjectOfType<HPBar>();
     }
 
     private void Update()
     {
         HandleWeaponSwitchInput();
+
+        // HP 테스트 키 (디버깅용)
+#if UNITY_EDITOR
+        if (Input.GetKeyDown(KeyCode.Insert))
+        {
+            TakeDamage(100);
+            Debug.Log("테스트: 데미지 -100");
+        }
+        if (Input.GetKeyDown(KeyCode.Home))
+        {
+            Heal(100);
+            Debug.Log("테스트: 회복 +100");
+        }
+        if (Input.GetKeyDown(KeyCode.PageUp))
+        {
+            IncreaseMaxHealth(250);
+            Debug.Log("테스트: 최대HP +250");
+        }
+#endif
     }
 
     private void FixedUpdate()
@@ -472,4 +493,41 @@ public class PlayerMovement : MonoBehaviour
             rb.isKinematic = wasKinematic;
         }
     }
+
+    public void TakeDamage(int damage)
+    {
+        if (IsDead) return;
+
+        if (healthBar != null)
+        {
+            healthBar.TakeDamage(damage);
+
+            // HP가 0이 되면 사망 처리
+            if (healthBar.IsDead)
+            {
+                Die();
+            }
+        }
+    }
+
+    // 회복 메서드 추가
+    public void Heal(int amount)
+    {
+        if (IsDead) return;
+
+        if (healthBar != null)
+        {
+            healthBar.Heal(amount);
+        }
+    }
+
+    // 최대 HP 증가 메서드 추가
+    public void IncreaseMaxHealth(int amount)
+    {
+        if (healthBar != null)
+        {
+            healthBar.IncreaseMaxHp(amount);
+        }
+    }
+
 }
