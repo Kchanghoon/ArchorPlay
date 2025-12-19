@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 
 public class EnemyHealth : MonoBehaviour
 {
@@ -8,13 +8,13 @@ public class EnemyHealth : MonoBehaviour
     private int currentHp;
     private bool isDead = false;
 
-    // ¿ÜºÎ¿¡¼­ Á×À½ »óÅÂ È®ÀÎ¿ë
+    // ì™¸ë¶€ì—ì„œ ì£½ìŒ ìƒíƒœ í™•ì¸ìš©
     public bool IsDead => isDead;
     public int CurrentHp => currentHp;
 
     [SerializeField] private int damageAmount = 100;
     [SerializeField] private float attackCooldown = 1f;
-
+    private Animator animator;
     private float lastAttackTime;
 
     private void OnCollisionStay(Collision collision)
@@ -27,18 +27,19 @@ public class EnemyHealth : MonoBehaviour
         {
             player.TakeDamage(damageAmount);
             lastAttackTime = Time.time;
-            Debug.Log($"ÇÃ·¹ÀÌ¾î¿¡°Ô {damageAmount} µ¥¹ÌÁö!");
+            Debug.Log($"í”Œë ˆì´ì–´ì—ê²Œ {damageAmount} ë°ë¯¸ì§€!");
         }
     }
 
     void Awake()
     {
         currentHp = maxHp;
+        animator = GetComponent<Animator>();
     }
 
     public void TakeDamage(int damage)
     {
-        // ÀÌ¹Ì Á×¾úÀ¸¸é µ¥¹ÌÁö ¹«½Ã
+        // ì´ë¯¸ ì£½ì—ˆìœ¼ë©´ ë°ë¯¸ì§€ ë¬´ì‹œ
         if (isDead)
             return;
 
@@ -58,14 +59,12 @@ public class EnemyHealth : MonoBehaviour
 
         isDead = true;
 
-        // Å¸°ÙÆÃ¿¡¼­ Áï½Ã Á¦¿ÜµÇµµ·Ï Collider ºñÈ°¼ºÈ­
+        // ì½œë¼ì´ë” ë¹„í™œì„±í™”
         Collider col = GetComponent<Collider>();
         if (col != null)
-        {
             col.enabled = false;
-        }
 
-        // NavMeshAgent Á¤Áö
+        // NavMeshAgent ì •ì§€
         UnityEngine.AI.NavMeshAgent agent = GetComponent<UnityEngine.AI.NavMeshAgent>();
         if (agent != null)
         {
@@ -73,21 +72,19 @@ public class EnemyHealth : MonoBehaviour
             agent.enabled = false;
         }
 
-        // EnemyMovement ½ºÅ©¸³Æ® ºñÈ°¼ºÈ­
+        // ì´ë™ ë¡œì§ ì¤‘ë‹¨
         EnemyMovement movement = GetComponent<EnemyMovement>();
         if (movement != null)
-        {
             movement.enabled = false;
+
+        // â­ ì£½ìŒ ì• ë‹ˆë©”ì´ì…˜ íŠ¸ë¦¬ê±°
+        if (animator != null)
+        {
+            animator.SetTrigger("Die");
         }
 
-        // TODO: Á×´Â ¾Ö´Ï¸ŞÀÌ¼ÇÀÌ ÀÖ´Ù¸é
-        // Animator anim = GetComponent<Animator>();
-        // if (anim != null)
-        // {
-        //     anim.SetTrigger("Die");
-        // }
-
-        // 2ÃÊ ÈÄ ÆÄ±« (¾Ö´Ï¸ŞÀÌ¼Ç Àç»ı ½Ã°£ °í·Á)
+        // ì• ë‹ˆë©”ì´ì…˜ ê¸¸ì´ë§Œí¼ ê¸°ë‹¤ë ¸ë‹¤ê°€ ì œê±°
         Destroy(gameObject, 2f);
     }
+
 }
