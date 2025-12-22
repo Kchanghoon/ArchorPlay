@@ -12,7 +12,7 @@ public class ExplosionLaser : MonoBehaviour
     [SerializeField] private float lineDisappearSpeed = 2f;  // 경고 라인 축소 속도
     [SerializeField] private float laserDuration = 0.3f;     // 레이저 지속 시간
     [SerializeField] private float explosionRadius = 5f;     // 폭발 범위
-    [SerializeField] private float explosionDamage = 50f;    // 폭발 기본 데미지
+    [SerializeField] private int explosionDamage = 50;    // 폭발 기본 데미지
     [SerializeField] private LayerMask wallLayer;            // 레이저 충돌(벽) 레이어
     [SerializeField] private LayerMask damageLayer;          // 피해 적용 레이어
 
@@ -75,7 +75,7 @@ public class ExplosionLaser : MonoBehaviour
             explosionParticle.Play();
         }
 
-        ApplyExplosionDamage(endPoint);
+        //ApplyExplosionDamage(endPoint);
 
         laserLine.enabled = false;
         yield return new WaitForSeconds(1f);
@@ -102,21 +102,21 @@ public class ExplosionLaser : MonoBehaviour
         warningLine.enabled = false;
     }
 
-    // 폭발 범위 내 대상에게 데미지 적용
-    void ApplyExplosionDamage(Vector3 explosionPos)
-    {
-        Collider[] colliders = Physics.OverlapSphere(explosionPos, explosionRadius, damageLayer);
+    //// 폭발 범위 내 대상에게 데미지 적용
+    //void ApplyExplosionDamage(Vector3 explosionPos)
+    //{
+    //    Collider[] colliders = Physics.OverlapSphere(explosionPos, explosionRadius, damageLayer);
 
-        foreach (Collider col in colliders)
-        {
-            // 데미지 처리 대상(IDamageable)만 적용
-            IDamageable damageable = col.GetComponent<IDamageable>();
-            if (damageable != null)
-            {
-                float distance = Vector3.Distance(explosionPos, col.transform.position);
-                float damageMultiplier = 1f - (distance / explosionRadius);
-                damageable.TakeDamage(explosionDamage * damageMultiplier);
-            }
-        }
-    }
+    //    foreach (Collider col in colliders)
+    //    {
+    //        // 데미지 처리 대상(IDamageable)만 적용
+    //        IDamageable damageable = col.GetComponent<IDamageable>();
+    //        if (damageable != null)
+    //        {
+    //            float distance = Vector3.Distance(explosionPos, col.transform.position);
+    //            float damageMultiplier = 1f - (distance / explosionRadius);
+    //            damageable.TakeDamage(explosionDamage * damageMultiplier);
+    //        }
+    //    }
+    //}
 }
