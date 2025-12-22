@@ -2666,6 +2666,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 100096, guid: 3e44f86169ecf5f41926bb82427b87d6, type: 3}
       insertIndex: -1
       addedObject: {fileID: 518603927}
+    - targetCorrespondingSourceObject: {fileID: 100096, guid: 3e44f86169ecf5f41926bb82427b87d6, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 518603929}
   m_SourcePrefab: {fileID: 100100000, guid: 3e44f86169ecf5f41926bb82427b87d6, type: 3}
 --- !u!4 &172561819 stripped
 Transform:
@@ -6304,7 +6307,6 @@ GameObject:
   - component: {fileID: 433291821}
   - component: {fileID: 433291820}
   - component: {fileID: 433291819}
-  - component: {fileID: 433291818}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -6312,27 +6314,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &433291818
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 433291817}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 088afba8334dd804c9925c10d1be4542, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::HPBar
-  maxHp: 1000
-  currentHp: 1000
-  hpPerCell: 250
-  cellPrefab: {fileID: 3646660943990298199, guid: a8a882aca5140f74ea1ed9d52dff2f15, type: 3}
-  containerRect: {fileID: 385166008}
-  grid: {fileID: 385166009}
-  spacingX: 5
-  cellHeight: 60
-  hpText: {fileID: 821494459}
 --- !u!114 &433291819
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7734,6 +7715,7 @@ MonoBehaviour:
     controller: {fileID: 9100000, guid: dffbd9326394a8d47a87a1e2aec70a59, type: 2}
   targeting: {fileID: 518603923}
   joystick: {fileID: 1818089081}
+  healtbar: {fileID: 518603929}
 --- !u!95 &518603921 stripped
 Animator:
   m_CorrespondingSourceObject: {fileID: 9500000, guid: 3e44f86169ecf5f41926bb82427b87d6, type: 3}
@@ -7836,6 +7818,27 @@ CapsuleCollider:
   m_Height: 0.9058083
   m_Direction: 1
   m_Center: {x: 0, y: 0.53518695, z: 0}
+--- !u!114 &518603929
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 518603917}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 088afba8334dd804c9925c10d1be4542, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HPBar
+  maxHp: 1000
+  currentHp: 1000
+  hpPerCell: 250
+  cellPrefab: {fileID: 3646660943990298199, guid: a8a882aca5140f74ea1ed9d52dff2f15, type: 3}
+  containerRect: {fileID: 385166008}
+  grid: {fileID: 385166009}
+  spacingX: 5
+  cellHeight: 60
+  hpText: {fileID: 821494459}
 --- !u!1 &522016923
 GameObject:
   m_ObjectHideFlags: 0

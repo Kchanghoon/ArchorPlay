@@ -13,7 +13,6 @@ public class PlayerMovement : MonoBehaviour
     #region Singleton
     public static PlayerMovement Instance { get; private set; }
 
-    private HPBar healthBar;
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -48,6 +47,8 @@ public class PlayerMovement : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private PlayerTargeting targeting;
     [SerializeField] private JoyStickMovement joystick;
+
+    [SerializeField] private HPBar healtbar;
     #endregion
 
     #region Private Fields
@@ -90,7 +91,6 @@ public class PlayerMovement : MonoBehaviour
         InitializeComponents();
         CacheAnimationParameters();
         InitializeWeapon();
-        healthBar = FindObjectOfType<HPBar>();
     }
 
     private void Update()
@@ -244,6 +244,7 @@ public class PlayerMovement : MonoBehaviour
 
     public void Die()
     {
+        Debug.Log("Die() 호출됨");
         SetState(PlayerState.Dead);
     }
     #endregion
@@ -497,13 +498,15 @@ public class PlayerMovement : MonoBehaviour
     public void TakeDamage(int damage)
     {
         if (IsDead) return;
+ 
 
-        if (healthBar != null)
+
+        if (healtbar != null)
         {
-            healthBar.TakeDamage(damage);
+            healtbar.TakeDamage(damage);
 
             // HP가 0이 되면 사망 처리
-            if (healthBar.IsDead)
+            if (healtbar.IsDead)
             {
                 Die();
             }
@@ -515,18 +518,18 @@ public class PlayerMovement : MonoBehaviour
     {
         if (IsDead) return;
 
-        if (healthBar != null)
+        if (healtbar != null)
         {
-            healthBar.Heal(amount);
+            healtbar.Heal(amount);
         }
     }
 
     // 최대 HP 증가 메서드 추가
     public void IncreaseMaxHealth(int amount)
     {
-        if (healthBar != null)
+        if (healtbar != null)
         {
-            healthBar.IncreaseMaxHp(amount);
+            healtbar.IncreaseMaxHp(amount);
         }
     }
 
